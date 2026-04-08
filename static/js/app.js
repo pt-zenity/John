@@ -435,14 +435,34 @@ function createJobCard(job, isActive) {
     };
     
     const crackedPasswordsHtml = job.cracked_passwords.length > 0 ? `
-        <div class="cracked-list">
-            <strong><i class="fas fa-unlock-alt"></i> Cracked Passwords (${job.cracked_passwords.length}):</strong>
-            ${job.cracked_passwords.map(p => `
-                <div class="cracked-item">
-                    <span class="username">${escapeHtml(p.username)}</span>: 
-                    <span class="password">${escapeHtml(p.password)}</span>
-                </div>
-            `).join('')}
+        <div class="cracked-passwords-section">
+            <div class="cracked-passwords-header">
+                <i class="fas fa-check-circle"></i>
+                <h4>🎉 Passwords Found!</h4>
+                <span class="cracked-passwords-count">${job.cracked_passwords.length}</span>
+            </div>
+            <div class="cracked-list">
+                ${job.cracked_passwords.map((p, index) => `
+                    <div class="cracked-item" style="animation-delay: ${index * 0.1}s;">
+                        <div class="cracked-credentials">
+                            <div class="cracked-username">
+                                <i class="fas fa-user"></i>
+                                ${escapeHtml(p.username)}
+                            </div>
+                            <div class="cracked-password">
+                                ${escapeHtml(p.password)}
+                            </div>
+                            <div class="cracked-timestamp">
+                                <i class="fas fa-clock"></i>
+                                Found at ${new Date(p.timestamp).toLocaleString()}
+                            </div>
+                        </div>
+                        <button class="copy-btn" onclick="copyToClipboard('${escapeHtml(p.username)}:${escapeHtml(p.password)}')">
+                            <i class="fas fa-copy"></i> Copy
+                        </button>
+                    </div>
+                `).join('')}
+            </div>
         </div>
     ` : '';
     
@@ -775,6 +795,22 @@ function copyToClipboard(text) {
         console.error('Failed to copy:', err);
         showToast('Failed to copy', 'error');
     });
+}
+
+// Toggle cracked passwords display
+function toggleCrackedPasswords(jobId) {
+    const list = document.getElementById(`cracked-${jobId}`);
+    const icon = document.getElementById(`toggle-${jobId}`);
+    
+    if (list.style.display === 'none') {
+        list.style.display = 'block';
+        icon.classList.remove('fa-chevron-down');
+        icon.classList.add('fa-chevron-up');
+    } else {
+        list.style.display = 'none';
+        icon.classList.remove('fa-chevron-up');
+        icon.classList.add('fa-chevron-down');
+    }
 }
 
 // Play notification sound
