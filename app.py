@@ -26,6 +26,10 @@ app.config['ALLOWED_EXTENSIONS'] = {'txt', 'hash', 'passwd', 'shadow'}
 
 # John the Ripper executable path
 JOHN_EXECUTABLE = '/usr/sbin/john'
+JOHN_HOME = '/usr/share/john'
+
+# Set JOHN environment variable for home directory
+os.environ['JOHN'] = JOHN_HOME
 
 # Global storage for running jobs
 jobs = {}
