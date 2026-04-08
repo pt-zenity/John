@@ -55,6 +55,14 @@ class CrackJob:
         self.end_time = None
         self.process = None
         self.telegram_notify = telegram_notify
+        # Progress tracking
+        self.total_hashes = 0
+        self.loaded_hashes = 0
+        self.current_password = ''
+        self.passwords_tried = 0
+        self.speed = '0 p/s'
+        self.eta = 'N/A'
+        self.progress_percentage = 0
         
     def to_dict(self):
         return {
@@ -68,7 +76,15 @@ class CrackJob:
             'cracked_passwords': self.cracked_passwords,
             'start_time': self.start_time,
             'end_time': self.end_time,
-            'duration': self._calculate_duration()
+            'duration': self._calculate_duration(),
+            # Progress info
+            'total_hashes': self.total_hashes,
+            'loaded_hashes': self.loaded_hashes,
+            'current_password': self.current_password,
+            'passwords_tried': self.passwords_tried,
+            'speed': self.speed,
+            'eta': self.eta,
+            'progress_percentage': self.progress_percentage
         }
     
     def _calculate_duration(self):
@@ -82,6 +98,54 @@ def allowed_file(filename):
     """Check if file extension is allowed"""
     return '.' in filename and \
            filename.rsplit('.', 1)[1].lower() in app.config['ALLOWED_EXTENSIONS']
+
+
+def parse_john_output(job, line):
+    """Parse John the Ripper output for progress information"""
+    import re
+    
+    try:
+        # Parse loaded hashes: "Loaded 5 password hashes"
+        if 'Loaded' in line and 'password hash' in line:
+            match = re.search(r'Loaded (\d+) password hash', line)
+            if match:
+                job.loaded_hashes = int(match.group(1))
+                job.total_hashes = job.loaded_hashes
+                job.progress_percentage = 5
+        
+        # Parse speed: "123p/s" or "1234 p/s"
+        speed_match = re.search(r'(\d+(?:\.\d+)?[KMG]?)\s*p/s', line)
+        if speed_match:
+            job.speed = speed_match.group(1) + ' p/s'
+            job.progress_percentage = min(95, job.progress_percentage + 1)
+        
+        # Parse trying: "Trying: password123"
+        if line.startswith('Trying:'):
+            parts = line.split(':', 1)
+            if len(parts) > 1:
+                job.current_password = parts[1].strip()
+                job.passwords_tried += 1
+                # Update progress based on passwords tried
+                if job.passwords_tried % 100 == 0:
+                    job.progress_percentage = min(80, 10 + (job.passwords_tried // 1000))
+        
+        # Parse ETA or time remaining
+        if 'ETA:' in line:
+            match = re.search(r'ETA:\s*([^\s]+)', line)
+            if match:
+                job.eta = match.group(1)
+        
+        # Parse percentage if available
+        percent_match = re.search(r'(\d+)%', line)
+        if percent_match:
+            job.progress_percentage = int(percent_match.group(1))
+        
+        # Update progress bar value
+        job.progress = job.progress_percentage
+        
+    except Exception as e:
+        # Silently ignore parsing errors
+        pass
 
 
 def send_telegram_message(message):
@@ -116,7 +180,7 @@ def run_john_crack(job_id):
         job.status = 'running'
         job.start_time = time.time()
         
-        # Build command
+        # Build command with --status option for progress
         cmd = [JOHN_EXECUTABLE]
         
         # Add mode-specific options
@@ -146,16 +210,22 @@ def run_john_crack(job_id):
         # Read output
         for line in iter(process.stdout.readline, ''):
             if line:
-                job.output.append(line.strip())
+                line_stripped = line.strip()
+                job.output.append(line_stripped)
+                
+                # Parse progress information
+                parse_john_output(job, line_stripped)
+                
                 # Parse for cracked passwords
-                if ':' in line and not line.startswith('Loaded'):
-                    parts = line.split(':')
-                    if len(parts) >= 2:
+                if ':' in line_stripped and not line_stripped.startswith('Loaded'):
+                    parts = line_stripped.split(':')
+                    if len(parts) >= 2 and not any(x in line_stripped.lower() for x in ['session', 'time', 'status']):
                         job.cracked_passwords.append({
                             'username': parts[0].strip(),
                             'password': parts[1].strip(),
                             'timestamp': datetime.now().isoformat()
                         })
+                        job.progress_percentage = min(90, job.progress_percentage + 5)
         
         process.wait()
         

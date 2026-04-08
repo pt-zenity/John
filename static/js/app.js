@@ -460,9 +460,40 @@ function createJobCard(job, isActive) {
             
             ${job.status === 'running' ? `
                 <div class="job-progress">
-                    <label>Progress</label>
+                    <div class="progress-header">
+                        <label>Progress: ${job.progress_percentage || job.progress}%</label>
+                        <span class="progress-speed">${job.speed || '0 p/s'}</span>
+                    </div>
                     <div class="progress-bar">
-                        <div class="progress-fill" style="width: ${job.progress}%"></div>
+                        <div class="progress-fill" style="width: ${job.progress_percentage || job.progress}%">
+                            <span class="progress-text">${job.progress_percentage || job.progress}%</span>
+                        </div>
+                    </div>
+                    <div class="progress-details">
+                        ${job.total_hashes > 0 ? `
+                            <div class="progress-item">
+                                <i class="fas fa-hashtag"></i> 
+                                <span>Loaded: ${job.loaded_hashes} hashes</span>
+                            </div>
+                        ` : ''}
+                        ${job.current_password ? `
+                            <div class="progress-item">
+                                <i class="fas fa-key"></i> 
+                                <span>Trying: <code>${escapeHtml(job.current_password)}</code></span>
+                            </div>
+                        ` : ''}
+                        ${job.passwords_tried > 0 ? `
+                            <div class="progress-item">
+                                <i class="fas fa-calculator"></i> 
+                                <span>Tried: ${job.passwords_tried.toLocaleString()} passwords</span>
+                            </div>
+                        ` : ''}
+                        ${job.eta && job.eta !== 'N/A' ? `
+                            <div class="progress-item">
+                                <i class="fas fa-clock"></i> 
+                                <span>ETA: ${job.eta}</span>
+                            </div>
+                        ` : ''}
                     </div>
                 </div>
             ` : ''}
@@ -529,6 +560,24 @@ async function viewJobDetails(jobId) {
                         <div><strong>Cracked:</strong> ${job.cracked_passwords.length} passwords</div>
                     </div>
                 </div>
+                
+                ${job.status === 'running' ? `
+                    <div style="margin-bottom: 1.5rem;">
+                        <h3 style="margin-bottom: 0.5rem;"><i class="fas fa-chart-line"></i> Live Progress</h3>
+                        <div class="progress-bar" style="height: 30px; margin-bottom: 1rem;">
+                            <div class="progress-fill" style="width: ${job.progress_percentage || job.progress}%">
+                                <span class="progress-text">${job.progress_percentage || job.progress}%</span>
+                            </div>
+                        </div>
+                        <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.75rem; font-size: 0.875rem;">
+                            ${job.speed ? `<div><strong>Speed:</strong> <span style="color: var(--success-color); font-family: monospace;">${job.speed}</span></div>` : ''}
+                            ${job.total_hashes > 0 ? `<div><strong>Total Hashes:</strong> ${job.total_hashes}</div>` : ''}
+                            ${job.passwords_tried > 0 ? `<div><strong>Passwords Tried:</strong> ${job.passwords_tried.toLocaleString()}</div>` : ''}
+                            ${job.eta && job.eta !== 'N/A' ? `<div><strong>ETA:</strong> ${job.eta}</div>` : ''}
+                            ${job.current_password ? `<div style="grid-column: 1 / -1;"><strong>Currently Trying:</strong> <code style="background: var(--bg-card); padding: 0.25rem 0.5rem; border-radius: 4px; color: var(--warning-color);">${escapeHtml(job.current_password)}</code></div>` : ''}
+                        </div>
+                    </div>
+                ` : ''}
                 
                 <div style="margin-bottom: 1.5rem;">
                     <h3 style="margin-bottom: 0.5rem;"><i class="fas fa-unlock-alt"></i> Cracked Passwords (${job.cracked_passwords.length})</h3>
