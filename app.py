@@ -12,6 +12,7 @@ import subprocess
 import uuid
 import time
 import json
+import requests
 from threading import Thread, Lock
 from datetime import datetime
 
@@ -30,10 +31,18 @@ JOHN_EXECUTABLE = '/usr/sbin/john'
 jobs = {}
 jobs_lock = Lock()
 
+# Telegram configuration
+telegram_config = {
+    'enabled': False,
+    'bot_token': None,
+    'chat_id': None
+}
+telegram_lock = Lock()
+
 
 class CrackJob:
     """Represents a password cracking job"""
-    def __init__(self, job_id, hash_file, wordlist=None, mode='default'):
+    def __init__(self, job_id, hash_file, wordlist=None, mode='default', telegram_notify=False):
         self.job_id = job_id
         self.hash_file = hash_file
         self.wordlist = wordlist
@@ -45,6 +54,7 @@ class CrackJob:
         self.start_time = None
         self.end_time = None
         self.process = None
+        self.telegram_notify = telegram_notify
         
     def to_dict(self):
         return {
@@ -72,6 +82,26 @@ def allowed_file(filename):
     """Check if file extension is allowed"""
     return '.' in filename and \
            filename.rsplit('.', 1)[1].lower() in app.config['ALLOWED_EXTENSIONS']
+
+
+def send_telegram_message(message):
+    """Send message to Telegram"""
+    with telegram_lock:
+        if not telegram_config['enabled'] or not telegram_config['bot_token'] or not telegram_config['chat_id']:
+            return False
+        
+        try:
+            url = f"https://api.telegram.org/bot{telegram_config['bot_token']}/sendMessage"
+            data = {
+                'chat_id': telegram_config['chat_id'],
+                'text': message,
+                'parse_mode': 'HTML'
+            }
+            response = requests.post(url, json=data, timeout=10)
+            return response.status_code == 200
+        except Exception as e:
+            print(f"Telegram error: {str(e)}")
+            return False
 
 
 def run_john_crack(job_id):
@@ -162,10 +192,37 @@ def run_john_crack(job_id):
         job.progress = 100
         job.end_time = time.time()
         
+        # Send Telegram notification if enabled
+        if job.telegram_notify and job.cracked_passwords:
+            send_job_result_telegram(job)
+        
     except Exception as e:
         job.status = 'failed'
         job.output.append(f"Error: {str(e)}")
         job.end_time = time.time()
+
+
+def send_job_result_telegram(job):
+    """Send job results to Telegram"""
+    try:
+        message = f"🔓 <b>John the Ripper - Job Completed</b>\n\n"
+        message += f"📋 <b>Job ID:</b> {job.job_id[:8]}...\n"
+        message += f"📁 <b>File:</b> {os.path.basename(job.hash_file)}\n"
+        message += f"⚙️ <b>Mode:</b> {job.mode}\n"
+        message += f"⏱ <b>Duration:</b> {job._calculate_duration()}s\n"
+        message += f"\n🔑 <b>Cracked Passwords ({len(job.cracked_passwords)}):</b>\n\n"
+        
+        for i, pwd in enumerate(job.cracked_passwords[:20], 1):  # Limit to 20
+            message += f"{i}. <code>{pwd['username']}:{pwd['password']}</code>\n"
+        
+        if len(job.cracked_passwords) > 20:
+            message += f"\n... and {len(job.cracked_passwords) - 20} more passwords\n"
+        
+        message += f"\n✅ <b>Status:</b> Completed successfully"
+        
+        send_telegram_message(message)
+    except Exception as e:
+        print(f"Failed to send Telegram notification: {str(e)}")
 
 
 @app.route('/')
@@ -238,6 +295,41 @@ def upload_file():
     }), 400
 
 
+@app.route('/api/paste', methods=['POST'])
+def paste_hashes():
+    """Create hash file from pasted content"""
+    data = request.get_json()
+    
+    if not data or 'content' not in data:
+        return jsonify({'status': 'error', 'message': 'Content required'}), 400
+    
+    content = data['content'].strip()
+    
+    if not content:
+        return jsonify({'status': 'error', 'message': 'Content cannot be empty'}), 400
+    
+    try:
+        # Create filename
+        timestamp = int(time.time())
+        filename = f"paste_{timestamp}.txt"
+        filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+        
+        # Save content to file
+        with open(filepath, 'w') as f:
+            f.write(content)
+        
+        return jsonify({
+            'status': 'success',
+            'filename': filename,
+            'filepath': filepath
+        })
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'message': f'Failed to save content: {str(e)}'
+        }), 500
+
+
 @app.route('/api/crack', methods=['POST'])
 def start_crack():
     """Start a password cracking job"""
@@ -254,7 +346,8 @@ def start_crack():
         job_id=job_id,
         hash_file=data['hash_file'],
         wordlist=data.get('wordlist'),
-        mode=data.get('mode', 'default')
+        mode=data.get('mode', 'default'),
+        telegram_notify=data.get('telegram_notify', False)
     )
     
     # Store job
@@ -351,6 +444,72 @@ def delete_job(job_id):
             })
     
     return jsonify({'status': 'error', 'message': 'Job not found'}), 404
+
+
+@app.route('/api/telegram/config', methods=['GET', 'POST'])
+def telegram_configuration():
+    """Get or set Telegram configuration"""
+    if request.method == 'GET':
+        with telegram_lock:
+            return jsonify({
+                'status': 'success',
+                'config': {
+                    'enabled': telegram_config['enabled'],
+                    'configured': bool(telegram_config['bot_token'] and telegram_config['chat_id'])
+                }
+            })
+    
+    elif request.method == 'POST':
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({'status': 'error', 'message': 'Configuration data required'}), 400
+        
+        with telegram_lock:
+            if 'bot_token' in data:
+                telegram_config['bot_token'] = data['bot_token'].strip() or None
+            
+            if 'chat_id' in data:
+                telegram_config['chat_id'] = data['chat_id'].strip() or None
+            
+            if 'enabled' in data:
+                telegram_config['enabled'] = bool(data['enabled'])
+        
+        # Test connection if enabled
+        if telegram_config['enabled'] and telegram_config['bot_token'] and telegram_config['chat_id']:
+            test_message = "🔔 <b>John the Ripper Web UI</b>\n\nTelegram notifications enabled successfully!"
+            if send_telegram_message(test_message):
+                return jsonify({
+                    'status': 'success',
+                    'message': 'Telegram configured and test message sent'
+                })
+            else:
+                return jsonify({
+                    'status': 'error',
+                    'message': 'Configuration saved but test message failed. Please check your bot token and chat ID.'
+                }), 400
+        
+        return jsonify({
+            'status': 'success',
+            'message': 'Configuration saved'
+        })
+
+
+@app.route('/api/telegram/test', methods=['POST'])
+def test_telegram():
+    """Send test message to Telegram"""
+    test_message = "🧪 <b>Test Message</b>\n\nThis is a test message from John the Ripper Web UI."
+    
+    if send_telegram_message(test_message):
+        return jsonify({
+            'status': 'success',
+            'message': 'Test message sent successfully'
+        })
+    else:
+        return jsonify({
+            'status': 'error',
+            'message': 'Failed to send test message. Please check your configuration.'
+        }), 400
 
 
 if __name__ == '__main__':

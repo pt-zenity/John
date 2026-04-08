@@ -2,6 +2,8 @@
 const API_BASE = '/api';
 let currentJobs = {};
 let refreshInterval = null;
+let currentInputMode = 'upload';
+let telegramConfigured = false;
 
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', function() {
@@ -9,6 +11,9 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Load system info
     loadSystemInfo();
+    
+    // Load Telegram config
+    loadTelegramConfig();
     
     // Setup form handlers
     setupFormHandlers();
@@ -35,12 +40,70 @@ async function loadSystemInfo() {
     }
 }
 
+// Load Telegram configuration
+async function loadTelegramConfig() {
+    try {
+        const response = await fetch(`${API_BASE}/telegram/config`);
+        const data = await response.json();
+        
+        if (data.status === 'success') {
+            telegramConfigured = data.config.configured && data.config.enabled;
+            updateTelegramStatus();
+        }
+    } catch (error) {
+        console.error('Failed to load Telegram config:', error);
+    }
+}
+
+// Update Telegram status display
+function updateTelegramStatus() {
+    const checkbox = document.getElementById('telegram-notify');
+    const statusText = document.getElementById('telegram-status');
+    
+    if (telegramConfigured) {
+        checkbox.disabled = false;
+        statusText.textContent = 'Telegram notifications are enabled';
+        statusText.classList.add('enabled');
+    } else {
+        checkbox.disabled = true;
+        checkbox.checked = false;
+        statusText.textContent = 'Configure Telegram in settings to enable notifications';
+        statusText.classList.remove('enabled');
+    }
+}
+
+// Switch input mode
+function switchInputMode(mode) {
+    currentInputMode = mode;
+    
+    // Update buttons
+    document.querySelectorAll('.toggle-btn').forEach(btn => {
+        btn.classList.remove('active');
+    });
+    event.target.closest('.toggle-btn').classList.add('active');
+    
+    // Update sections
+    document.querySelectorAll('.input-section').forEach(section => {
+        section.classList.remove('active');
+    });
+    
+    if (mode === 'upload') {
+        document.getElementById('upload-section').classList.add('active');
+    } else {
+        document.getElementById('paste-section').classList.add('active');
+    }
+    
+    // Clear status
+    document.getElementById('upload-status').innerHTML = '';
+}
+
 // Setup form handlers
 function setupFormHandlers() {
     const form = document.getElementById('crack-form');
     const modeSelect = document.getElementById('crack-mode');
     const wordlistGroup = document.getElementById('wordlist-group');
     const fileInput = document.getElementById('hash-file');
+    const telegramForm = document.getElementById('telegram-form');
     
     // Mode change handler
     modeSelect.addEventListener('change', function() {
@@ -52,13 +115,15 @@ function setupFormHandlers() {
     });
     
     // File input handler
-    fileInput.addEventListener('change', function() {
-        if (this.files.length > 0) {
-            const fileName = this.files[0].name;
-            const display = document.querySelector('.file-upload-display span');
-            display.textContent = `Selected: ${fileName}`;
-        }
-    });
+    if (fileInput) {
+        fileInput.addEventListener('change', function() {
+            if (this.files.length > 0) {
+                const fileName = this.files[0].name;
+                const display = document.querySelector('.file-upload-display span');
+                display.textContent = `Selected: ${fileName}`;
+            }
+        });
+    }
     
     // Form submit handler
     form.addEventListener('submit', async function(e) {
@@ -71,48 +136,94 @@ function setupFormHandlers() {
         const display = document.querySelector('.file-upload-display span');
         display.textContent = 'Click to upload or drag and drop';
         document.getElementById('upload-status').innerHTML = '';
+        document.getElementById('hash-paste').value = '';
         wordlistGroup.style.display = 'none';
     });
+    
+    // Telegram form handler
+    if (telegramForm) {
+        telegramForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            await saveTelegramConfig();
+        });
+    }
 }
 
 // Start cracking job
 async function startCrackingJob() {
-    const fileInput = document.getElementById('hash-file');
     const mode = document.getElementById('crack-mode').value;
     const wordlistPath = document.getElementById('wordlist-path').value;
     const uploadStatus = document.getElementById('upload-status');
+    const telegramNotify = document.getElementById('telegram-notify').checked;
     
-    if (!fileInput.files.length) {
-        showToast('Please select a hash file', 'error');
-        return;
-    }
+    let filepath;
     
     try {
-        // Upload file first
-        uploadStatus.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Uploading file...';
-        
-        const formData = new FormData();
-        formData.append('file', fileInput.files[0]);
-        
-        const uploadResponse = await fetch(`${API_BASE}/upload`, {
-            method: 'POST',
-            body: formData
-        });
-        
-        const uploadData = await uploadResponse.json();
-        
-        if (uploadData.status !== 'success') {
-            throw new Error(uploadData.message || 'Upload failed');
+        if (currentInputMode === 'upload') {
+            // Upload file mode
+            const fileInput = document.getElementById('hash-file');
+            
+            if (!fileInput.files.length) {
+                showToast('Please select a hash file', 'error');
+                return;
+            }
+            
+            uploadStatus.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Uploading file...';
+            
+            const formData = new FormData();
+            formData.append('file', fileInput.files[0]);
+            
+            const uploadResponse = await fetch(`${API_BASE}/upload`, {
+                method: 'POST',
+                body: formData
+            });
+            
+            const uploadData = await uploadResponse.json();
+            
+            if (uploadData.status !== 'success') {
+                throw new Error(uploadData.message || 'Upload failed');
+            }
+            
+            filepath = uploadData.filepath;
+            uploadStatus.innerHTML = `<i class="fas fa-check-circle"></i> File uploaded successfully`;
+            uploadStatus.className = 'upload-status success';
+            
+        } else {
+            // Paste mode
+            const pasteContent = document.getElementById('hash-paste').value.trim();
+            
+            if (!pasteContent) {
+                showToast('Please paste some hashes', 'error');
+                return;
+            }
+            
+            uploadStatus.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing hashes...';
+            
+            const pasteResponse = await fetch(`${API_BASE}/paste`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ content: pasteContent })
+            });
+            
+            const pasteData = await pasteResponse.json();
+            
+            if (pasteData.status !== 'success') {
+                throw new Error(pasteData.message || 'Paste failed');
+            }
+            
+            filepath = pasteData.filepath;
+            uploadStatus.innerHTML = `<i class="fas fa-check-circle"></i> Hashes saved successfully`;
+            uploadStatus.className = 'upload-status success';
         }
-        
-        uploadStatus.innerHTML = `<i class="fas fa-check-circle"></i> File uploaded successfully`;
-        uploadStatus.className = 'upload-status success';
         
         // Start cracking job
         const jobData = {
-            hash_file: uploadData.filepath,
+            hash_file: filepath,
             mode: mode,
-            wordlist: mode === 'wordlist' && wordlistPath ? wordlistPath : null
+            wordlist: mode === 'wordlist' && wordlistPath ? wordlistPath : null,
+            telegram_notify: telegramNotify
         };
         
         const crackResponse = await fetch(`${API_BASE}/crack`, {
@@ -130,6 +241,7 @@ async function startCrackingJob() {
             document.getElementById('crack-form').reset();
             uploadStatus.innerHTML = '';
             document.querySelector('.file-upload-display span').textContent = 'Click to upload or drag and drop';
+            document.getElementById('hash-paste').value = '';
             
             // Refresh jobs immediately
             setTimeout(() => refreshJobs(), 500);
@@ -141,6 +253,85 @@ async function startCrackingJob() {
         console.error('Error starting job:', error);
         uploadStatus.innerHTML = `<i class="fas fa-exclamation-circle"></i> Error: ${error.message}`;
         uploadStatus.className = 'upload-status error';
+        showToast(`Error: ${error.message}`, 'error');
+    }
+}
+
+// Open Telegram settings
+function openTelegramSettings() {
+    loadCurrentTelegramConfig();
+    document.getElementById('telegram-modal').classList.add('active');
+}
+
+// Load current Telegram configuration
+async function loadCurrentTelegramConfig() {
+    try {
+        const response = await fetch(`${API_BASE}/telegram/config`);
+        const data = await response.json();
+        
+        if (data.status === 'success') {
+            document.getElementById('telegram-enabled').checked = data.config.enabled;
+        }
+    } catch (error) {
+        console.error('Failed to load Telegram config:', error);
+    }
+}
+
+// Save Telegram configuration
+async function saveTelegramConfig() {
+    const botToken = document.getElementById('bot-token').value.trim();
+    const chatId = document.getElementById('chat-id').value.trim();
+    const enabled = document.getElementById('telegram-enabled').checked;
+    
+    if (!botToken || !chatId) {
+        showToast('Please fill in both Bot Token and Chat ID', 'error');
+        return;
+    }
+    
+    try {
+        const response = await fetch(`${API_BASE}/telegram/config`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                bot_token: botToken,
+                chat_id: chatId,
+                enabled: enabled
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (data.status === 'success') {
+            showToast('Telegram configured successfully! Test message sent.', 'success');
+            closeModal('telegram-modal');
+            loadTelegramConfig();
+        } else {
+            showToast(data.message || 'Failed to configure Telegram', 'error');
+        }
+    } catch (error) {
+        console.error('Error saving Telegram config:', error);
+        showToast(`Error: ${error.message}`, 'error');
+    }
+}
+
+// Test Telegram
+async function testTelegram() {
+    try {
+        const response = await fetch(`${API_BASE}/telegram/test`, {
+            method: 'POST'
+        });
+        
+        const data = await response.json();
+        
+        if (data.status === 'success') {
+            showToast('Test message sent successfully!', 'success');
+        } else {
+            showToast(data.message || 'Failed to send test message', 'error');
+        }
+    } catch (error) {
+        console.error('Error testing Telegram:', error);
         showToast(`Error: ${error.message}`, 'error');
     }
 }
@@ -359,8 +550,8 @@ async function viewJobDetails(jobId) {
 }
 
 // Close modal
-function closeModal() {
-    const modal = document.getElementById('job-modal');
+function closeModal(modalId) {
+    const modal = document.getElementById(modalId || 'job-modal');
     modal.classList.remove('active');
 }
 
@@ -447,8 +638,7 @@ function escapeHtml(text) {
 
 // Close modal when clicking outside
 document.addEventListener('click', function(e) {
-    const modal = document.getElementById('job-modal');
-    if (e.target === modal) {
-        closeModal();
+    if (e.target.classList.contains('modal')) {
+        e.target.classList.remove('active');
     }
 });

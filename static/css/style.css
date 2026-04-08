@@ -703,3 +703,143 @@ input[type="file"] {
         justify-content: center;
     }
 }
+
+/* Input Toggle */
+.input-toggle {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.toggle-btn {
+    padding: 0.5rem 1rem;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    color: var(--text-secondary);
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.875rem;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.toggle-btn:hover {
+    border-color: var(--primary-color);
+    color: var(--text-primary);
+}
+
+.toggle-btn.active {
+    background: var(--primary-color);
+    border-color: var(--primary-color);
+    color: white;
+}
+
+.input-section {
+    display: none;
+}
+
+.input-section.active {
+    display: block;
+}
+
+/* Textarea */
+textarea {
+    width: 100%;
+    padding: 0.75rem 1rem;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    color: var(--text-primary);
+    font-size: 0.875rem;
+    font-family: 'Courier New', monospace;
+    resize: vertical;
+    transition: border-color 0.2s;
+}
+
+textarea:focus {
+    outline: none;
+    border-color: var(--primary-color);
+}
+
+textarea::placeholder {
+    color: var(--text-secondary);
+}
+
+/* Checkbox */
+.checkbox-label {
+    display: flex !important;
+    align-items: center;
+    gap: 0.75rem;
+    cursor: pointer;
+    user-select: none;
+}
+
+.checkbox-label input[type="checkbox"] {
+    width: 20px;
+    height: 20px;
+    cursor: pointer;
+    accent-color: var(--primary-color);
+}
+
+.checkbox-label span {
+    color: var(--text-primary);
+}
+
+.telegram-hint {
+    display: block;
+    margin-top: 0.5rem;
+    color: var(--text-secondary);
+    font-size: 0.75rem;
+}
+
+.telegram-hint.enabled {
+    color: var(--success-color);
+}
+
+/* Telegram Info */
+.telegram-info {
+    margin-top: 2rem;
+    padding: 1.5rem;
+    background: var(--bg-card);
+    border-radius: 8px;
+    border-left: 3px solid var(--primary-color);
+}
+
+.telegram-info h4 {
+    margin-bottom: 1rem;
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.telegram-info ol {
+    margin-left: 1.5rem;
+    color: var(--text-secondary);
+}
+
+.telegram-info li {
+    margin: 0.5rem 0;
+}
+
+.telegram-info code {
+    background: var(--bg-color);
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    color: var(--primary-color);
+    font-family: monospace;
+}
+
+.telegram-info strong {
+    color: var(--text-primary);
+}
+
+.telegram-info a {
+    color: var(--primary-color);
+    text-decoration: none;
+}
+
+.telegram-info a:hover {
+    text-decoration: underline;
+}
