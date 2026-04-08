@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>John the Ripper Web UI - Professional Password Cracking Interface</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="container">
+            <div class="header-content">
+                <div class="logo">
+                    <i class="fas fa-key"></i>
+                    <h1>John the Ripper Web UI</h1>
+                </div>
+                <div class="header-info">
+                    <span class="version" id="version-info">Loading...</span>
+                    <span class="status-indicator online">
+                        <i class="fas fa-circle"></i> Online
+                    </span>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="main-content">
+        <div class="container">
+            <!-- Stats Cards -->
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-icon blue">
+                        <i class="fas fa-tasks"></i>
+                    </div>
+                    <div class="stat-info">
+                        <h3 id="total-jobs">0</h3>
+                        <p>Total Jobs</p>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon green">
+                        <i class="fas fa-play-circle"></i>
+                    </div>
+                    <div class="stat-info">
+                        <h3 id="running-jobs">0</h3>
+                        <p>Running Jobs</p>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon orange">
+                        <i class="fas fa-check-circle"></i>
+                    </div>
+                    <div class="stat-info">
+                        <h3 id="completed-jobs">0</h3>
+                        <p>Completed Jobs</p>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon purple">
+                        <i class="fas fa-unlock-alt"></i>
+                    </div>
+                    <div class="stat-info">
+                        <h3 id="cracked-passwords">0</h3>
+                        <p>Cracked Passwords</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- New Job Section -->
+            <div class="card">
+                <div class="card-header">
+                    <h2><i class="fas fa-plus-circle"></i> New Cracking Job</h2>
+                </div>
+                <div class="card-body">
+                    <form id="crack-form">
+                        <div class="form-row">
+                            <div class="form-group full-width">
+                                <label for="hash-file">
+                                    <i class="fas fa-file-upload"></i> Hash File
+                                </label>
+                                <div class="file-upload-wrapper">
+                                    <input type="file" id="hash-file" accept=".txt,.hash,.passwd,.shadow" required>
+                                    <div class="file-upload-display">
+                                        <i class="fas fa-cloud-upload-alt"></i>
+                                        <span>Click to upload or drag and drop</span>
+                                        <small>Supported: .txt, .hash, .passwd, .shadow (Max 16MB)</small>
+                                    </div>
+                                </div>
+                                <div id="upload-status" class="upload-status"></div>
+                            </div>
+                        </div>
+
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="crack-mode">
+                                    <i class="fas fa-cogs"></i> Cracking Mode
+                                </label>
+                                <select id="crack-mode" required>
+                                    <option value="default">Default (Auto)</option>
+                                    <option value="single">Single Crack Mode</option>
+                                    <option value="wordlist">Wordlist Mode</option>
+                                    <option value="incremental">Incremental Mode</option>
+                                </select>
+                            </div>
+
+                            <div class="form-group" id="wordlist-group" style="display: none;">
+                                <label for="wordlist-path">
+                                    <i class="fas fa-list"></i> Wordlist Path (optional)
+                                </label>
+                                <input type="text" id="wordlist-path" placeholder="/usr/share/wordlists/rockyou.txt">
+                            </div>
+                        </div>
+
+                        <div class="form-actions">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-rocket"></i> Start Cracking
+                            </button>
+                            <button type="reset" class="btn btn-secondary">
+                                <i class="fas fa-redo"></i> Reset
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Active Jobs Section -->
+            <div class="card">
+                <div class="card-header">
+                    <h2><i class="fas fa-spinner"></i> Active Jobs</h2>
+                    <button class="btn btn-small btn-secondary" onclick="refreshJobs()">
+                        <i class="fas fa-sync-alt"></i> Refresh
+                    </button>
+                </div>
+                <div class="card-body">
+                    <div id="jobs-list" class="jobs-list">
+                        <div class="empty-state">
+                            <i class="fas fa-inbox"></i>
+                            <p>No jobs running. Start a new cracking job above.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Job History -->
+            <div class="card">
+                <div class="card-header">
+                    <h2><i class="fas fa-history"></i> Job History</h2>
+                </div>
+                <div class="card-body">
+                    <div id="history-list" class="history-list">
+                        <div class="empty-state">
+                            <i class="fas fa-clock"></i>
+                            <p>No job history yet.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <p>&copy; 2026 John the Ripper Web UI. Professional Password Security Testing Platform.</p>
+            <p><i class="fas fa-shield-alt"></i> Use responsibly and ethically. Only test passwords you own or have permission to test.</p>
+        </div>
+    </footer>
+
+    <!-- Job Detail Modal -->
+    <div id="job-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2><i class="fas fa-info-circle"></i> Job Details</h2>
+                <button class="close-btn" onclick="closeModal()">&times;</button>
+            </div>
+            <div class="modal-body" id="modal-body">
+                <!-- Job details will be inserted here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="toast"></div>
+
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>
