@@ -13,6 +13,15 @@ A professional web interface for John the Ripper password cracking tool running 
 - 🔍 **Detailed Job View** - View full output and cracked passwords
 - 💾 **Export Results** - View and copy cracked passwords
 
+### Live Progress Tracking
+- 📈 **Real-time Progress Bar** - Visual progress indicator (0-100%)
+- ⚡ **Live Speed Display** - Passwords per second (p/s) in real-time
+- 🔑 **Current Password Display** - See what password is being tried
+- 🔢 **Passwords Tried Counter** - Total attempts counter
+- ⏱️ **ETA Display** - Estimated time of arrival
+- #️⃣ **Hash Count** - Number of loaded hashes
+- 📊 **Progress Details Grid** - Comprehensive progress information
+
 ### Input Methods
 - 📁 **File Upload** - Upload hash files (.txt, .hash, .passwd, .shadow)
 - 📋 **Paste Hashes** - Directly paste hashes into text area
