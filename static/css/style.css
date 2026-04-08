@@ -909,3 +909,110 @@ textarea::placeholder {
 .telegram-info a:hover {
     text-decoration: underline;
 }
+
+/* Password Found Notification */
+.password-notification {
+    position: fixed;
+    top: 100px;
+    right: -400px;
+    width: 350px;
+    background: linear-gradient(135deg, var(--success-color), #059669);
+    border-radius: 12px;
+    padding: 1.5rem;
+    box-shadow: 0 10px 25px rgba(16, 185, 129, 0.4);
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    z-index: 2001;
+    transition: right 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+    border: 2px solid rgba(255, 255, 255, 0.2);
+}
+
+.password-notification.show {
+    right: 2rem;
+    animation: bounce 0.6s ease-out;
+}
+
+@keyframes bounce {
+    0%, 100% { transform: translateY(0); }
+    25% { transform: translateY(-10px); }
+    50% { transform: translateY(5px); }
+    75% { transform: translateY(-5px); }
+}
+
+.notification-icon {
+    width: 60px;
+    height: 60px;
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.75rem;
+    color: white;
+    animation: pulse-icon 1s ease-in-out infinite;
+}
+
+@keyframes pulse-icon {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.1); }
+}
+
+.notification-content {
+    flex: 1;
+    color: white;
+}
+
+.notification-title {
+    font-size: 1rem;
+    font-weight: 700;
+    margin-bottom: 0.5rem;
+}
+
+.notification-username {
+    font-size: 0.875rem;
+    font-weight: 600;
+    margin-bottom: 0.25rem;
+    font-family: monospace;
+}
+
+.notification-password {
+    font-size: 1.125rem;
+    font-weight: 700;
+    margin-bottom: 0.5rem;
+    font-family: monospace;
+    background: rgba(0, 0, 0, 0.2);
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    display: inline-block;
+}
+
+.notification-job {
+    font-size: 0.75rem;
+    opacity: 0.9;
+}
+
+/* Job Card Highlight Animation */
+.job-item.password-found-highlight {
+    animation: cardHighlight 2s ease-in-out;
+    border-color: var(--success-color);
+}
+
+@keyframes cardHighlight {
+    0%, 100% { 
+        box-shadow: var(--shadow);
+        transform: scale(1);
+    }
+    25% {
+        box-shadow: 0 0 30px rgba(16, 185, 129, 0.6);
+        transform: scale(1.02);
+    }
+    50% {
+        box-shadow: 0 0 20px rgba(16, 185, 129, 0.4);
+        transform: scale(1.01);
+    }
+    75% {
+        box-shadow: 0 0 30px rgba(16, 185, 129, 0.6);
+        transform: scale(1.02);
+    }
+}

@@ -4,6 +4,8 @@ let currentJobs = {};
 let refreshInterval = null;
 let currentInputMode = 'upload';
 let telegramConfigured = false;
+let lastCrackedCounts = {}; // Track cracked password counts per job
+let notificationSound = null;
 
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', function() {
@@ -343,9 +345,15 @@ async function refreshJobs() {
         const data = await response.json();
         
         if (data.status === 'success') {
+            // Store old jobs for comparison
+            const oldJobs = {...currentJobs};
+            
             currentJobs = {};
             data.jobs.forEach(job => {
                 currentJobs[job.job_id] = job;
+                
+                // Check for new cracked passwords
+                checkNewCrackedPasswords(job, oldJobs[job.job_id]);
             });
             
             updateJobsList();
@@ -353,6 +361,32 @@ async function refreshJobs() {
         }
     } catch (error) {
         console.error('Failed to refresh jobs:', error);
+    }
+}
+
+// Check for new cracked passwords and notify
+function checkNewCrackedPasswords(newJob, oldJob) {
+    if (!newJob || newJob.status !== 'running') {
+        return;
+    }
+    
+    const newCount = newJob.cracked_passwords.length;
+    const oldCount = oldJob ? oldJob.cracked_passwords.length : 0;
+    
+    if (newCount > oldCount) {
+        // New passwords found!
+        const newPasswords = newJob.cracked_passwords.slice(oldCount);
+        
+        newPasswords.forEach(pwd => {
+            // Show notification toast
+            showPasswordFoundNotification(pwd, newJob);
+            
+            // Play sound
+            playNotificationSound();
+            
+            // Add visual effect to job card
+            highlightJobCard(newJob.job_id);
+        });
     }
 }
 
@@ -652,6 +686,93 @@ async function deleteJob(jobId) {
         console.error('Failed to delete job:', error);
         showToast(`Error: ${error.message}`, 'error');
     }
+}
+
+// Show notification when password is found
+function showPasswordFoundNotification(password, job) {
+    const notification = document.createElement('div');
+    notification.className = 'password-notification';
+    notification.innerHTML = `
+        <div class="notification-icon">
+            <i class="fas fa-unlock-alt"></i>
+        </div>
+        <div class="notification-content">
+            <div class="notification-title">🎉 Password Cracked!</div>
+            <div class="notification-username">${escapeHtml(password.username)}</div>
+            <div class="notification-password">${escapeHtml(password.password)}</div>
+            <div class="notification-job">Job: ${job.job_id.substring(0, 8)}...</div>
+        </div>
+    `;
+    
+    document.body.appendChild(notification);
+    
+    // Trigger animation
+    setTimeout(() => notification.classList.add('show'), 10);
+    
+    // Remove after 5 seconds
+    setTimeout(() => {
+        notification.classList.remove('show');
+        setTimeout(() => notification.remove(), 300);
+    }, 5000);
+}
+
+// Play notification sound
+function playNotificationSound() {
+    try {
+        // Create audio context if not exists
+        if (!notificationSound) {
+            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            
+            // Create a simple success sound
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+            
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+            
+            oscillator.frequency.value = 800;
+            oscillator.type = 'sine';
+            
+            gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
+            
+            oscillator.start(audioContext.currentTime);
+            oscillator.stop(audioContext.currentTime + 0.5);
+            
+            // Second beep
+            setTimeout(() => {
+                const osc2 = audioContext.createOscillator();
+                const gain2 = audioContext.createGain();
+                
+                osc2.connect(gain2);
+                gain2.connect(audioContext.destination);
+                
+                osc2.frequency.value = 1000;
+                osc2.type = 'sine';
+                
+                gain2.gain.setValueAtTime(0.3, audioContext.currentTime);
+                gain2.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
+                
+                osc2.start(audioContext.currentTime);
+                osc2.stop(audioContext.currentTime + 0.3);
+            }, 100);
+        }
+    } catch (error) {
+        console.log('Could not play sound:', error);
+    }
+}
+
+// Highlight job card when password found
+function highlightJobCard(jobId) {
+    // Find job card element
+    const jobCards = document.querySelectorAll('.job-item');
+    jobCards.forEach(card => {
+        const cardJobId = card.querySelector('.job-id');
+        if (cardJobId && cardJobId.textContent.includes(jobId.substring(0, 8))) {
+            card.classList.add('password-found-highlight');
+            setTimeout(() => card.classList.remove('password-found-highlight'), 2000);
+        }
+    });
 }
 
 // Show toast notification
