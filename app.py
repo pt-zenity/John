@@ -186,7 +186,6 @@ def run_john_crack(job_id):
         # Build command with unique session and no save/restore
         cmd = [JOHN_EXECUTABLE]
         cmd.extend(['--session=' + session_name])  # Unique session name
-        cmd.extend(['--no-log'])  # Disable logging to avoid conflicts
         
         # Add mode-specific options
         if job.mode == 'wordlist' and job.wordlist:
