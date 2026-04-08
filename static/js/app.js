@@ -690,6 +690,7 @@ async function deleteJob(jobId) {
 
 // Show notification when password is found
 function showPasswordFoundNotification(password, job) {
+    // Show small notification
     const notification = document.createElement('div');
     notification.className = 'password-notification';
     notification.innerHTML = `
@@ -714,6 +715,66 @@ function showPasswordFoundNotification(password, job) {
         notification.classList.remove('show');
         setTimeout(() => notification.remove(), 300);
     }, 5000);
+    
+    // Show big modal
+    showPasswordFoundModal(password, job);
+}
+
+// Show password found modal
+function showPasswordFoundModal(password, job) {
+    const modal = document.getElementById('password-found-modal');
+    const display = document.getElementById('cracked-password-display');
+    
+    display.innerHTML = `
+        <div class="password-result-item">
+            <div class="password-result-label">
+                <small>Username</small>
+                <span class="password-result-username">${escapeHtml(password.username)}</span>
+            </div>
+            <button class="copy-btn" onclick="copyToClipboard('${escapeHtml(password.username)}')">
+                <i class="fas fa-copy"></i>
+            </button>
+        </div>
+        <div class="password-result-item">
+            <div class="password-result-label">
+                <small>Password</small>
+                <span class="password-result-value">${escapeHtml(password.password)}</span>
+            </div>
+            <button class="copy-btn" onclick="copyToClipboard('${escapeHtml(password.password)}')">
+                <i class="fas fa-copy"></i>
+            </button>
+        </div>
+        <div class="password-result-item">
+            <div class="password-result-label">
+                <small>Job ID</small>
+                <span style="font-family: monospace; color: var(--text-secondary);">${job.job_id.substring(0, 8)}...</span>
+            </div>
+            <button class="copy-btn" onclick="copyToClipboard('${job.job_id}')">
+                <i class="fas fa-copy"></i>
+            </button>
+        </div>
+        <div style="text-align: center; margin-top: 1.5rem; color: var(--text-secondary); font-size: 0.875rem;">
+            <i class="fas fa-clock"></i> Found at ${new Date(password.timestamp).toLocaleString()}
+        </div>
+    `;
+    
+    modal.classList.add('active');
+}
+
+// Close password found modal
+function closePasswordModal() {
+    const modal = document.getElementById('password-found-modal');
+    modal.classList.remove('active');
+}
+
+// Copy to clipboard function
+function copyToClipboard(text) {
+    navigator.clipboard.writeText(text).then(() => {
+        showToast('Copied to clipboard!', 'success');
+    }).catch(err => {
+        console.error('Failed to copy:', err);
+        showToast('Failed to copy', 'error');
+    });
 }
 
 // Play notification sound

@@ -284,6 +284,25 @@ $5$rounds=5000$salt$hash..."></textarea>
     <!-- Toast Notification -->
     <div id="toast" class="toast"></div>
 
+    <!-- Password Found Modal -->
+    <div id="password-found-modal" class="password-found-modal">
+        <div class="password-found-content">
+            <div class="success-animation">
+                <div class="success-circle">
+                    <i class="fas fa-check"></i>
+                </div>
+                <div class="confetti"></div>
+            </div>
+            <h2 class="success-title">🎉 Password Cracked!</h2>
+            <div class="cracked-password-display" id="cracked-password-display">
+                <!-- Password details will be inserted here -->
+            </div>
+            <button class="btn btn-primary" onclick="closePasswordModal()">
+                <i class="fas fa-check"></i> Got it!
+            </button>
+        </div>
+    </div>
+
     <script src="{{ url_for('static', filename='js/app.js') }}"></script>
 </body>
 </html>
