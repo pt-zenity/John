@@ -180,8 +180,13 @@ def run_john_crack(job_id):
         job.status = 'running'
         job.start_time = time.time()
         
-        # Build command with --status option for progress
+        # Generate unique session name to avoid recovery file conflicts
+        session_name = f"session_{job_id[:8]}"
+        
+        # Build command with unique session and no save/restore
         cmd = [JOHN_EXECUTABLE]
+        cmd.extend(['--session=' + session_name])  # Unique session name
+        cmd.extend(['--no-log'])  # Disable logging to avoid conflicts
         
         # Add mode-specific options
         if job.mode == 'wordlist' and job.wordlist:
@@ -211,27 +216,38 @@ def run_john_crack(job_id):
         for line in iter(process.stdout.readline, ''):
             if line:
                 line_stripped = line.strip()
+                
+                # Filter out lock/recovery messages
+                if 'Crash recovery file is locked' in line_stripped or \
+                   'john.rec' in line_stripped.lower():
+                    continue  # Skip these messages
+                
                 job.output.append(line_stripped)
                 
                 # Parse progress information
                 parse_john_output(job, line_stripped)
                 
-                # Parse for cracked passwords
+                # Parse for cracked passwords (improved detection)
                 if ':' in line_stripped and not line_stripped.startswith('Loaded'):
                     parts = line_stripped.split(':')
-                    if len(parts) >= 2 and not any(x in line_stripped.lower() for x in ['session', 'time', 'status']):
-                        job.cracked_passwords.append({
-                            'username': parts[0].strip(),
-                            'password': parts[1].strip(),
-                            'timestamp': datetime.now().isoformat()
-                        })
-                        job.progress_percentage = min(90, job.progress_percentage + 5)
+                    if len(parts) >= 2 and not any(x in line_stripped.lower() for x in ['session', 'time', 'status', 'loaded', 'remaining']):
+                        username = parts[0].strip()
+                        password = ':'.join(parts[1:]).strip()  # Handle passwords with colons
+                        
+                        # Avoid duplicates
+                        if not any(p['username'] == username for p in job.cracked_passwords):
+                            job.cracked_passwords.append({
+                                'username': username,
+                                'password': password,
+                                'timestamp': datetime.now().isoformat()
+                            })
+                            job.progress_percentage = min(90, job.progress_percentage + 5)
         
         process.wait()
         
-        # Get the results using --show
+        # Get the results using --show with same session
         try:
-            show_cmd = [JOHN_EXECUTABLE, '--show', job.hash_file]
+            show_cmd = [JOHN_EXECUTABLE, '--show', '--session=' + session_name, job.hash_file]
             result = subprocess.run(
                 show_cmd,
                 capture_output=True,
@@ -240,15 +256,16 @@ def run_john_crack(job_id):
             )
             
             if result.stdout:
-                job.output.append("\n=== Cracked Passwords ===")
+                job.output.append("\n=== Final Cracked Passwords ===")
                 for line in result.stdout.strip().split('\n'):
-                    if line and ':' in line and not line.startswith('0 password'):
+                    if line and ':' in line and not line.startswith('0 password') and \
+                       'password hash' not in line.lower():
                         job.output.append(line)
                         parts = line.split(':')
                         if len(parts) >= 2:
-                            # Check if not already added
                             username = parts[0].strip()
-                            password = parts[1].strip()
+                            password = ':'.join(parts[1:]).strip()
+                            # Check if not already added
                             if not any(p['username'] == username for p in job.cracked_passwords):
                                 job.cracked_passwords.append({
                                     'username': username,
@@ -257,6 +274,15 @@ def run_john_crack(job_id):
                                 })
         except Exception as e:
             job.output.append(f"Error getting results: {str(e)}")
+        
+        # Clean up session files
+        try:
+            session_files = [f"/root/.john/{session_name}.rec", f"/root/.john/{session_name}.log"]
+            for session_file in session_files:
+                if os.path.exists(session_file):
+                    os.remove(session_file)
+        except:
+            pass  # Ignore cleanup errors
         
         job.status = 'completed'
         job.progress = 100
