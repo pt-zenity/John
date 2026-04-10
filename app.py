@@ -183,121 +183,134 @@ def run_john_crack(job_id):
     try:
         job.status = 'running'
         job.start_time = time.time()
-        
-        # Generate unique session name to avoid recovery file conflicts
+
+        # Unique session name per job – avoids john.rec lock conflicts
         session_name = f"session_{job_id[:8]}"
-        
-        # Build command with unique session and no save/restore
-        cmd = [JOHN_EXECUTABLE]
-        cmd.extend(['--session=' + session_name])  # Unique session name
-        
-        # Add mode-specific options
-        if job.mode == 'wordlist' and job.wordlist:
-            cmd.extend(['--wordlist=' + job.wordlist])
+
+        # Environment: tell jumbo where its home is
+        env = os.environ.copy()
+        env['JOHN'] = JOHN_HOME
+
+        # ── Build command ──────────────────────────────────────────────
+        cpu_threads = os.cpu_count() or 4
+        cmd = [JOHN_EXECUTABLE, f'--session={session_name}']
+
+        if job.mode == 'wordlist':
+            wl = job.wordlist or '/usr/share/john/password.lst'
+            cmd += [f'--wordlist={wl}', '--rules=best64']
         elif job.mode == 'incremental':
-            cmd.extend(['--incremental'])
+            cmd += ['--incremental']
         elif job.mode == 'single':
-            cmd.extend(['--single'])
-        
-        # Add hash file
+            cmd += ['--single']
+        # default: let john auto-select
+
         cmd.append(job.hash_file)
-        
-        job.output.append(f"Starting John the Ripper with command: {' '.join(cmd)}")
-        
-        # Run the process
+
+        job.output.append(f"[*] Command : {' '.join(cmd)}")
+        job.output.append(f"[*] Threads : {cpu_threads} OpenMP")
+        job.output.append(f"[*] John    : {JOHN_EXECUTABLE} (jumbo)")
+
+        # ── Launch ─────────────────────────────────────────────────────
         process = subprocess.Popen(
             cmd,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             universal_newlines=True,
-            bufsize=1
+            bufsize=1,
+            env=env
         )
-        
         job.process = process
-        
-        # Read output
-        for line in iter(process.stdout.readline, ''):
-            if line:
-                line_stripped = line.strip()
-                
-                # Filter out lock/recovery messages
-                if 'Crash recovery file is locked' in line_stripped or \
-                   'john.rec' in line_stripped.lower():
-                    continue  # Skip these messages
-                
-                job.output.append(line_stripped)
-                
-                # Parse progress information
-                parse_john_output(job, line_stripped)
-                
-                # Parse for cracked passwords (improved detection)
-                if ':' in line_stripped and not line_stripped.startswith('Loaded'):
-                    parts = line_stripped.split(':')
-                    if len(parts) >= 2 and not any(x in line_stripped.lower() for x in ['session', 'time', 'status', 'loaded', 'remaining']):
-                        username = parts[0].strip()
-                        password = ':'.join(parts[1:]).strip()  # Handle passwords with colons
-                        
-                        # Avoid duplicates
-                        if not any(p['username'] == username for p in job.cracked_passwords):
-                            job.cracked_passwords.append({
-                                'username': username,
-                                'password': password,
-                                'timestamp': datetime.now().isoformat()
-                            })
-                            job.progress_percentage = min(90, job.progress_percentage + 5)
-        
+
+        # ── Stream output ──────────────────────────────────────────────
+        SKIP = ('Crash recovery file is locked', 'john.rec',
+                'fopen:', 'No such file or directory')
+
+        for raw in iter(process.stdout.readline, ''):
+            line = raw.strip()
+            if not line:
+                continue
+            # Drop noisy / error lines we don't want to show
+            if any(s in line for s in SKIP):
+                continue
+
+            job.output.append(line)
+            parse_john_output(job, line)
+
+            # ── Detect cracked password ────────────────────────────────
+            # John prints:   username:password  (FOUND banner) or bare line
+            # We look for a colon-separated line that isn't metadata
+            NOISE = ('session', 'loaded', 'remaining', 'status', 'will run',
+                     'using', 'press', 'warning', 'note:', 'cost',
+                     'node', 'each node', 'delayed', 'openmp', 'failed',
+                     'enabled', 'duplic')
+            if ':' in line and not any(n in line.lower() for n in NOISE):
+                parts = line.split(':')
+                username = parts[0].strip()
+                password = ':'.join(parts[1:]).strip()
+                # Only accept if it looks like real data (non-empty both sides)
+                if username and password and len(password) <= 128:
+                    if not any(p['username'] == username
+                               for p in job.cracked_passwords):
+                        job.cracked_passwords.append({
+                            'username': username,
+                            'password': password,
+                            'timestamp': datetime.now().isoformat()
+                        })
+                        job.progress_percentage = min(95,
+                            job.progress_percentage + 10)
+                        job.output.append(
+                            f"[+] CRACKED → {username}:{password}")
+
         process.wait()
-        
-        # Get the results using --show with same session
+
+        # ── --show: collect anything john cached in its pot file ───────
         try:
-            show_cmd = [JOHN_EXECUTABLE, '--show', '--session=' + session_name, job.hash_file]
-            result = subprocess.run(
-                show_cmd,
-                capture_output=True,
-                text=True,
-                timeout=30
+            show_result = subprocess.run(
+                [JOHN_EXECUTABLE, '--show', job.hash_file],
+                capture_output=True, text=True, timeout=30, env=env
             )
-            
-            if result.stdout:
-                job.output.append("\n=== Final Cracked Passwords ===")
-                for line in result.stdout.strip().split('\n'):
-                    if line and ':' in line and not line.startswith('0 password') and \
-                       'password hash' not in line.lower():
-                        job.output.append(line)
-                        parts = line.split(':')
-                        if len(parts) >= 2:
-                            username = parts[0].strip()
-                            password = ':'.join(parts[1:]).strip()
-                            # Check if not already added
-                            if not any(p['username'] == username for p in job.cracked_passwords):
-                                job.cracked_passwords.append({
-                                    'username': username,
-                                    'password': password,
-                                    'timestamp': datetime.now().isoformat()
-                                })
+            job.output.append("\n=== Final Results (--show) ===")
+            for line in show_result.stdout.strip().splitlines():
+                if ':' not in line:
+                    continue
+                if 'password hash' in line.lower() or line.startswith('0 '):
+                    job.output.append(line)
+                    continue
+                parts = line.split(':')
+                username = parts[0].strip()
+                password = ':'.join(parts[1:]).strip()
+                if username and password:
+                    job.output.append(f"  {username} : {password}")
+                    if not any(p['username'] == username
+                               for p in job.cracked_passwords):
+                        job.cracked_passwords.append({
+                            'username': username,
+                            'password': password,
+                            'timestamp': datetime.now().isoformat()
+                        })
         except Exception as e:
-            job.output.append(f"Error getting results: {str(e)}")
-        
-        # Clean up session files
-        try:
-            session_files = [f"/root/.john/{session_name}.rec", f"/root/.john/{session_name}.log"]
-            for session_file in session_files:
-                if os.path.exists(session_file):
-                    os.remove(session_file)
-        except:
-            pass  # Ignore cleanup errors
-        
+            job.output.append(f"[!] --show error: {e}")
+
+        # ── Cleanup session rec file ───────────────────────────────────
+        for ext in ('.rec', '.log'):
+            p = f"/root/.john/{session_name}{ext}"
+            try:
+                if os.path.exists(p):
+                    os.remove(p)
+            except Exception:
+                pass
+
         job.status = 'completed'
         job.progress = 100
+        job.progress_percentage = 100
         job.end_time = time.time()
-        
-        # Send Telegram notification if enabled
+
         if job.telegram_notify and job.cracked_passwords:
             send_job_result_telegram(job)
-        
+
     except Exception as e:
         job.status = 'failed'
-        job.output.append(f"Error: {str(e)}")
+        job.output.append(f"[!] Error: {e}")
         job.end_time = time.time()
 
 
@@ -437,6 +450,13 @@ def start_crack():
     if not data or 'hash_file' not in data:
         return jsonify({'status': 'error', 'message': 'Hash file required'}), 400
     
+    # Choose best available wordlist
+    wordlist = data.get('wordlist')
+    if not wordlist:
+        ROCKYOU = '/usr/share/wordlists/rockyou.txt'
+        JOHN_WL = '/usr/share/john/password.lst'
+        wordlist = ROCKYOU if os.path.exists(ROCKYOU) else JOHN_WL
+
     # Generate job ID
     job_id = str(uuid.uuid4())
     
@@ -444,7 +464,7 @@ def start_crack():
     job = CrackJob(
         job_id=job_id,
         hash_file=data['hash_file'],
-        wordlist=data.get('wordlist'),
+        wordlist=wordlist,
         mode=data.get('mode', 'default'),
         telegram_notify=data.get('telegram_notify', False)
     )
@@ -461,7 +481,8 @@ def start_crack():
     return jsonify({
         'status': 'success',
         'job_id': job_id,
-        'message': 'Cracking job started'
+        'message': 'Cracking job started',
+        'wordlist': wordlist
     })
 
 
