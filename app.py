@@ -33,6 +33,27 @@ FALLBACK_WL     = os.path.join(JOHN_HOME, 'password.lst')
 # Expose JOHN home so the jumbo binary finds its config/rules
 os.environ['JOHN'] = JOHN_HOME
 
+
+def _ensure_john_symlinks():
+    """
+    Ensure john can find its support files from /usr/sbin (its executable dir).
+    John uses $JOHN or the executable directory for config/wordlist lookup.
+    We set JOHN=/usr/share/john via env, but also create symlinks as fallback.
+    """
+    needed = {
+        '/usr/sbin/password.lst': '/usr/share/john/password.lst',
+        '/usr/sbin/john.conf':    '/usr/share/john/john.conf',
+    }
+    for link, target in needed.items():
+        try:
+            if not os.path.exists(link) and os.path.exists(target):
+                os.symlink(target, link)
+        except Exception:
+            pass
+
+
+_ensure_john_symlinks()
+
 # ── In-memory job store ───────────────────────────────────────────────────────
 jobs:      dict = {}
 jobs_lock: Lock = Lock()
@@ -131,6 +152,8 @@ _SKIP_TOKENS = (
     'crash recovery file is locked',
     'john.rec',
     '.rec',
+    'fopen:',
+    'no such file or directory',
 )
 
 
@@ -399,14 +422,20 @@ def run_john_crack(job_id: str) -> None:
             cmd.append('--incremental')
         elif job.mode == 'single':
             cmd.append('--single')
-        # 'default' → no extra flags, john auto-selects strategy
+        else:
+            # 'default' mode: run single first, then wordlist with rockyou
+            # John's built-in default also tries to use $JOHN/password.lst
+            # which may not exist → explicitly provide the best wordlist
+            wl = _best_wordlist(None)
+            cmd += [f'--wordlist={wl}']
 
         cmd.append(job.hash_file)
 
+        used_wl = next((p.split('=',1)[1] for p in cmd if p.startswith('--wordlist=')), 'none')
         job.output += [
             f"[*] John     : {JOHN_EXECUTABLE} (jumbo)",
             f"[*] Command  : {' '.join(cmd)}",
-            f"[*] Wordlist : {job.wordlist or 'auto'}",
+            f"[*] Wordlist : {used_wl}",
             f"[*] Threads  : {os.cpu_count() or 4} OpenMP",
         ]
 
