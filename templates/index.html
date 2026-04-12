@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>John the Ripper Web UI - Professional Password Cracking Interface</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=4.0">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=5.0">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 <body>
@@ -20,7 +20,7 @@
                     <button class="btn btn-small btn-secondary" onclick="openTelegramSettings()">
                         <i class="fab fa-telegram"></i> Telegram
                     </button>
-                    <span class="version" id="version-info">Loading...</span>
+                    <span class="version" id="version-info">Loading…</span>
                     <span class="status-indicator online">
                         <i class="fas fa-circle"></i> Online
                     </span>
@@ -32,6 +32,7 @@
     <!-- Main Content -->
     <main class="main-content">
         <div class="container">
+
             <!-- Stats Cards -->
             <div class="stats-grid">
                 <div class="stat-card">
@@ -77,16 +78,23 @@
                 <div class="card-header">
                     <h2><i class="fas fa-plus-circle"></i> New Cracking Job</h2>
                     <div class="input-toggle">
-                        <button type="button" class="toggle-btn active" data-target="upload-section" onclick="switchInputMode('upload')">
+                        <button type="button"
+                                class="toggle-btn active"
+                                data-target="upload-section"
+                                onclick="switchInputMode('upload', this)">
                             <i class="fas fa-upload"></i> Upload File
                         </button>
-                        <button type="button" class="toggle-btn" data-target="paste-section" onclick="switchInputMode('paste')">
+                        <button type="button"
+                                class="toggle-btn"
+                                data-target="paste-section"
+                                onclick="switchInputMode('paste', this)">
                             <i class="fas fa-paste"></i> Paste Hashes
                         </button>
                     </div>
                 </div>
                 <div class="card-body">
-                    <form id="crack-form">
+                    <form id="crack-form" autocomplete="off">
+
                         <!-- Upload Section -->
                         <div id="upload-section" class="input-section active">
                             <div class="form-row">
@@ -95,11 +103,12 @@
                                         <i class="fas fa-file-upload"></i> Hash File
                                     </label>
                                     <div class="file-upload-wrapper">
-                                        <input type="file" id="hash-file" accept=".txt,.hash,.passwd,.shadow">
+                                        <input type="file" id="hash-file"
+                                               accept=".txt,.hash,.passwd,.shadow">
                                         <div class="file-upload-display">
                                             <i class="fas fa-cloud-upload-alt"></i>
                                             <span>Click to upload or drag and drop</span>
-                                            <small>Supported: .txt, .hash, .passwd, .shadow (Max 16MB)</small>
+                                            <small>Supported: .txt .hash .passwd .shadow (Max 16 MB)</small>
                                         </div>
                                     </div>
                                 </div>
@@ -113,12 +122,13 @@
                                     <label for="hash-paste">
                                         <i class="fas fa-paste"></i> Paste Hashes
                                     </label>
-                                    <textarea id="hash-paste" rows="8" placeholder="Paste your hashes here, one per line...
-Example:
-user1:$1$salt$hash...
-user2:$6$salt$hash...
-$5$rounds=5000$salt$hash..."></textarea>
-                                    <small>Paste password hashes in any supported format (MD5, SHA, etc.)</small>
+                                    <textarea id="hash-paste" rows="8"
+                                              placeholder="Paste your hashes here, one per line…
+Examples:
+admin:$2y$12$...bcrypt...
+user:$6$salt$...sha512...
+user:5f4dcc3b5aa765d61d8327deb882cf99  (MD5)"></textarea>
+                                    <small>Any john-supported format: bcrypt, MD5, SHA-512, NTLM, etc.</small>
                                 </div>
                             </div>
                         </div>
@@ -131,18 +141,20 @@ $5$rounds=5000$salt$hash..."></textarea>
                                     <i class="fas fa-cogs"></i> Cracking Mode
                                 </label>
                                 <select id="crack-mode" required>
-                                    <option value="default">Default (Auto)</option>
+                                    <option value="default">Default (Auto – John chooses best)</option>
+                                    <option value="wordlist">Wordlist + Rules (rockyou.txt + best64)</option>
                                     <option value="single">Single Crack Mode</option>
-                                    <option value="wordlist">Wordlist Mode</option>
-                                    <option value="incremental">Incremental Mode</option>
+                                    <option value="incremental">Incremental (brute-force)</option>
                                 </select>
                             </div>
 
-                            <div class="form-group" id="wordlist-group" style="display: none;">
+                            <div class="form-group" id="wordlist-group" style="display:none">
                                 <label for="wordlist-path">
-                                    <i class="fas fa-list"></i> Wordlist Path (optional)
+                                    <i class="fas fa-list"></i> Custom Wordlist Path (optional)
                                 </label>
-                                <input type="text" id="wordlist-path" placeholder="/usr/share/wordlists/rockyou.txt">
+                                <input type="text" id="wordlist-path"
+                                       placeholder="/usr/share/wordlists/rockyou.txt">
+                                <small>Leave blank to use rockyou.txt automatically</small>
                             </div>
                         </div>
 
@@ -152,7 +164,9 @@ $5$rounds=5000$salt$hash..."></textarea>
                                     <input type="checkbox" id="telegram-notify">
                                     <span><i class="fab fa-telegram"></i> Send results to Telegram</span>
                                 </label>
-                                <small id="telegram-status" class="telegram-hint">Configure Telegram in settings to enable notifications</small>
+                                <small id="telegram-status" class="telegram-hint">
+                                    Configure Telegram in settings to enable notifications
+                                </small>
                             </div>
                         </div>
 
@@ -171,7 +185,7 @@ $5$rounds=5000$salt$hash..."></textarea>
             <!-- Active Jobs Section -->
             <div class="card">
                 <div class="card-header">
-                    <h2><i class="fas fa-spinner"></i> Active Jobs</h2>
+                    <h2><i class="fas fa-spinner fa-spin"></i> Active Jobs</h2>
                     <button class="btn btn-small btn-secondary" onclick="refreshJobs()">
                         <i class="fas fa-sync-alt"></i> Refresh
                     </button>
@@ -200,13 +214,14 @@ $5$rounds=5000$salt$hash..."></textarea>
                     </div>
                 </div>
             </div>
+
         </div>
     </main>
 
     <!-- Footer -->
     <footer class="footer">
         <div class="container">
-            <p>&copy; 2026 John the Ripper Web UI. Professional Password Security Testing Platform.</p>
+            <p>&copy; 2026 John the Ripper Web UI &mdash; Professional Password Security Testing Platform</p>
             <p><i class="fas fa-shield-alt"></i> Use responsibly and ethically. Only test passwords you own or have permission to test.</p>
         </div>
     </footer>
@@ -219,7 +234,7 @@ $5$rounds=5000$salt$hash..."></textarea>
                 <button class="close-btn" onclick="closeModal('job-modal')">&times;</button>
             </div>
             <div class="modal-body" id="modal-body">
-                <!-- Job details will be inserted here -->
+                <!-- Populated by JS -->
             </div>
         </div>
     </div>
@@ -232,21 +247,26 @@ $5$rounds=5000$salt$hash..."></textarea>
                 <button class="close-btn" onclick="closeModal('telegram-modal')">&times;</button>
             </div>
             <div class="modal-body">
-                <form id="telegram-form">
+                <form id="telegram-form" autocomplete="off">
                     <div class="form-group">
                         <label for="bot-token">
                             <i class="fas fa-robot"></i> Bot Token
                         </label>
-                        <input type="text" id="bot-token" placeholder="1234567890:ABCdefGHIjklMNOpqrsTUVwxyz" required>
-                        <small>Get your bot token from <a href="https://t.me/BotFather" target="_blank">@BotFather</a></small>
+                        <input type="text" id="bot-token"
+                               placeholder="1234567890:ABCdefGHIjklMNOpqrsTUVwxyz">
+                        <small>Get your bot token from
+                            <a href="https://t.me/BotFather" target="_blank" rel="noopener">@BotFather</a>
+                        </small>
                     </div>
 
                     <div class="form-group">
                         <label for="chat-id">
                             <i class="fas fa-comment"></i> Chat ID
                         </label>
-                        <input type="text" id="chat-id" placeholder="123456789" required>
-                        <small>Get your chat ID from <a href="https://t.me/userinfobot" target="_blank">@userinfobot</a></small>
+                        <input type="text" id="chat-id" placeholder="-100123456789">
+                        <small>Get your chat ID from
+                            <a href="https://t.me/userinfobot" target="_blank" rel="noopener">@userinfobot</a>
+                        </small>
                     </div>
 
                     <div class="form-group">
@@ -258,7 +278,7 @@ $5$rounds=5000$salt$hash..."></textarea>
 
                     <div class="form-actions">
                         <button type="submit" class="btn btn-primary">
-                            <i class="fas fa-save"></i> Save & Test
+                            <i class="fas fa-save"></i> Save &amp; Test
                         </button>
                         <button type="button" class="btn btn-secondary" onclick="testTelegram()">
                             <i class="fas fa-paper-plane"></i> Send Test Message
@@ -267,14 +287,14 @@ $5$rounds=5000$salt$hash..."></textarea>
                 </form>
 
                 <div class="telegram-info">
-                    <h4><i class="fas fa-info-circle"></i> How to Setup:</h4>
+                    <h4><i class="fas fa-info-circle"></i> How to Set Up:</h4>
                     <ol>
                         <li>Open Telegram and search for <strong>@BotFather</strong></li>
-                        <li>Send <code>/newbot</code> and follow instructions to create your bot</li>
+                        <li>Send <code>/newbot</code> and follow instructions</li>
                         <li>Copy the <strong>Bot Token</strong> provided</li>
                         <li>Search for <strong>@userinfobot</strong> and send any message</li>
                         <li>Copy your <strong>Chat ID</strong> from the response</li>
-                        <li>Paste both values above and enable notifications</li>
+                        <li>Paste both values above and click <strong>Save &amp; Test</strong></li>
                     </ol>
                 </div>
             </div>
@@ -295,7 +315,7 @@ $5$rounds=5000$salt$hash..."></textarea>
             </div>
             <h2 class="success-title">🎉 Password Cracked!</h2>
             <div class="cracked-password-display" id="cracked-password-display">
-                <!-- Password details will be inserted here -->
+                <!-- Password details inserted by JS -->
             </div>
             <button class="btn btn-primary" onclick="closePasswordModal()">
                 <i class="fas fa-check"></i> Got it!
@@ -303,6 +323,6 @@ $5$rounds=5000$salt$hash..."></textarea>
         </div>
     </div>
 
-    <script src="{{ url_for('static', filename='js/app.js') }}?v=4.0"></script>
+    <script src="{{ url_for('static', filename='js/app.js') }}?v=5.0"></script>
 </body>
 </html>
