@@ -151,9 +151,14 @@ _METADATA_TOKENS = (
 _SKIP_TOKENS = (
     'crash recovery file is locked',
     'john.rec',
-    '.rec',
+    '.rec ',         # e.g. "session_abc.rec " – note trailing space to avoid false positives
     'fopen:',
     'no such file or directory',
+    'proceeding with single',
+    'proceeding with wordlist',
+    'proceeding with incremental',
+    'almost done:',
+    'press any key',
 )
 
 
@@ -423,11 +428,12 @@ def run_john_crack(job_id: str) -> None:
         elif job.mode == 'single':
             cmd.append('--single')
         else:
-            # 'default' mode: run single first, then wordlist with rockyou
-            # John's built-in default also tries to use $JOHN/password.lst
-            # which may not exist → explicitly provide the best wordlist
+            # 'default' mode: let john run its built-in sequence
+            # (single → wordlist with $JOHN/password.lst → incremental)
+            # We explicitly pass the best wordlist so it never tries
+            # the missing /usr/sbin/password.lst path.
             wl = _best_wordlist(None)
-            cmd += [f'--wordlist={wl}']
+            cmd += [f'--wordlist={wl}', '--rules']
 
         cmd.append(job.hash_file)
 
@@ -514,16 +520,24 @@ def run_john_crack(job_id: str) -> None:
                     if not ln:
                         continue
                     job.output.append(ln)
-                    # "0 password hashes cracked" → skip
-                    if ln.startswith('0 ') or 'password hash' in ln.lower():
+                    # "0 password hashes cracked", "1 password hash cracked" → skip summary
+                    if re.match(r'^\d+ password hash', ln.lower()):
                         continue
                     if ':' in ln:
-                        p     = ln.split(':', 1)
-                        uname = p[0].strip()
-                        pwd   = p[1].strip()
-                        # Strip trailing hash/format info after the password
-                        # john --show lines are: user:password:UID:GID:GECOS:home:shell
-                        # or just user:password
+                        parts = ln.split(':')
+                        uname = parts[0].strip()
+                        # John --show output formats:
+                        #   user:password                          (simple)
+                        #   user:password:UID:GID:GECOS:home:shell (passwd format)
+                        # Password is always field[1], but may contain ':' itself
+                        # Only strip fields 2+ when they look like UNIX passwd
+                        # (field 2 is numeric UID) to avoid cutting real passwords.
+                        if len(parts) >= 7 and parts[2].isdigit():
+                            # UNIX /etc/passwd format – password is field 1 only
+                            pwd = parts[1].strip()
+                        else:
+                            # Simple or unknown – rejoin everything after first colon
+                            pwd = ':'.join(parts[1:]).strip()
                         if _add_cracked(job, uname, pwd):
                             added_count += 1
                 if added_count > 0:
@@ -779,6 +793,17 @@ def api_telegram_test():
                         'message': 'Test message sent successfully'})
     return jsonify({'status': 'error',
                     'message': 'Failed – check your configuration'}), 400
+
+
+# ── Favicon ──────────────────────────────────────────────────────────────────
+@app.route('/favicon.ico')
+def favicon():
+    """Return a minimal inline SVG favicon so browsers don't 404."""
+    svg = ('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">'
+           '<text y=".9em" font-size="90">🔑</text></svg>')
+    from flask import Response
+    return Response(svg, mimetype='image/svg+xml',
+                    headers={'Cache-Control': 'public, max-age=86400'})
 
 
 # ── Version ───────────────────────────────────────────────────────────────────

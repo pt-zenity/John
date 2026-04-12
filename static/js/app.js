@@ -1,18 +1,19 @@
 // ─────────────────────────────────────────────────────────────────────────────
-//  John the Ripper Web UI  –  app.js  v5.0
+//  John the Ripper Web UI  –  app.js  v6.0
 // ─────────────────────────────────────────────────────────────────────────────
 'use strict';
 
 const API_BASE = '/api';
 
-let currentJobs      = {};          // job_id → job object
-let refreshInterval  = null;
-let currentInputMode = 'upload';
-let telegramReady    = false;       // true when enabled+configured
-let audioCtx         = null;        // singleton AudioContext
-let prevCrackedCount = {};          // job_id → last known cracked count
-let modalAutoRefresh = null;        // interval for detail modal live updates
-let modalJobId       = null;        // job id currently shown in modal
+let currentJobs        = {};        // job_id → job object
+let refreshInterval    = null;
+let currentInputMode   = 'upload';
+let telegramReady      = false;     // true when enabled+configured
+let audioCtx           = null;      // singleton AudioContext (lazy – created on first user gesture)
+let prevCrackedCount   = {};        // job_id → last known cracked count
+let shownModalForPwd   = new Set(); // "job_id:username" pairs already shown in modal
+let modalAutoRefresh   = null;      // interval for detail modal live updates
+let modalJobId         = null;      // job id currently shown in modal
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  Boot
@@ -346,9 +347,14 @@ async function refreshJobs() {
             if (curr > prev) {
                 const newOnes = job.cracked_passwords.slice(prev);
                 newOnes.forEach(pwd => {
-                    showPasswordFoundNotification(pwd, job);
-                    playNotificationSound();
-                    highlightJobCard(job.job_id);
+                    const key = `${job.job_id}:${pwd.username}`;
+                    // Only show banner + modal once per unique credential
+                    if (!shownModalForPwd.has(key)) {
+                        shownModalForPwd.add(key);
+                        showPasswordFoundNotification(pwd, job);
+                        playNotificationSound();
+                        highlightJobCard(job.job_id);
+                    }
                 });
             }
             prevCrackedCount[job.job_id] = curr;
@@ -727,29 +733,43 @@ function closePasswordModal() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Audio notification  (reuse singleton AudioContext)
+//  Audio notification
+//  AudioContext is created lazily on the first user interaction that triggers a
+//  notification, avoiding the browser's autoplay-policy console warning on load.
 // ─────────────────────────────────────────────────────────────────────────────
+function _getAudioCtx() {
+    if (!audioCtx) {
+        try {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        } catch (_) {
+            return null;
+        }
+    }
+    return audioCtx;
+}
+
 function playNotificationSound() {
     try {
-        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        if (audioCtx.state === 'suspended') audioCtx.resume();
+        const ctx = _getAudioCtx();
+        if (!ctx) return;
+        if (ctx.state === 'suspended') ctx.resume();
 
-        // Victory jingle: three ascending notes
-        [[523, 0, 0.2], [659, 0.18, 0.2], [784, 0.36, 0.35]].forEach(([freq, start, dur]) => {
-            const osc  = audioCtx.createOscillator();
-            const gain = audioCtx.createGain();
+        // Victory jingle: three ascending notes (C5 → E5 → G5)
+        [[523, 0, 0.22], [659, 0.20, 0.22], [784, 0.40, 0.38]].forEach(([freq, start, dur]) => {
+            const osc  = ctx.createOscillator();
+            const gain = ctx.createGain();
             osc.connect(gain);
-            gain.connect(audioCtx.destination);
+            gain.connect(ctx.destination);
             osc.frequency.value = freq;
             osc.type = 'sine';
-            const t0 = audioCtx.currentTime + start;
-            gain.gain.setValueAtTime(0.3, t0);
+            const t0 = ctx.currentTime + start;
+            gain.gain.setValueAtTime(0.28, t0);
             gain.gain.exponentialRampToValueAtTime(0.001, t0 + dur);
             osc.start(t0);
             osc.stop(t0 + dur + 0.05);
         });
     } catch (e) {
-        console.log('Audio:', e.message);
+        // Silently ignore audio errors
     }
 }
 
