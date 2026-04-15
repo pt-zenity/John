@@ -30,6 +30,10 @@ JOHN_HOME       = '/usr/share/john'
 ROCKYOU         = '/usr/share/wordlists/rockyou.txt'
 FALLBACK_WL     = os.path.join(JOHN_HOME, 'password.lst')
 
+# ── Custom wordlists directory (user-managed) ─────────────────────────────────
+WORDLISTS_DIR   = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                               'static', 'wordlists')
+
 # Expose JOHN home so the jumbo binary finds its config/rules
 os.environ['JOHN'] = JOHN_HOME
 
@@ -288,14 +292,86 @@ def parse_john_output(job: CrackJob, line: str) -> None:
 
 
 def _best_wordlist(user_provided: str | None) -> str:
-    """Return best available wordlist path."""
-    if user_provided and os.path.isfile(user_provided):
-        return user_provided
+    """Return best available wordlist path.
+
+    Priority:
+      1. user_provided path (if it exists)
+      2. named wordlist inside WORDLISTS_DIR  (e.g. 'custom.txt')
+      3. rockyou.txt
+      4. john's built-in password.lst
+    """
+    if user_provided:
+        # Accept absolute path or bare filename inside WORDLISTS_DIR
+        if os.path.isfile(user_provided):
+            return user_provided
+        candidate = os.path.join(WORDLISTS_DIR, user_provided)
+        if os.path.isfile(candidate):
+            return candidate
     if os.path.isfile(ROCKYOU):
         return ROCKYOU
     if os.path.isfile(FALLBACK_WL):
         return FALLBACK_WL
     return FALLBACK_WL  # return path even if not exists, john will error gracefully
+
+
+def _list_wordlists() -> list:
+    """Return list of dicts describing every available wordlist."""
+    result = []
+
+    # 1. Custom wordlists in WORDLISTS_DIR
+    os.makedirs(WORDLISTS_DIR, exist_ok=True)
+    for fname in sorted(os.listdir(WORDLISTS_DIR)):
+        if not fname.endswith(('.txt', '.lst', '.wordlist', '.dic')):
+            continue
+        fpath = os.path.join(WORDLISTS_DIR, fname)
+        if not os.path.isfile(fpath):
+            continue
+        try:
+            size  = os.path.getsize(fpath)
+            lines = sum(1 for _ in open(fpath, 'rb'))
+        except Exception:
+            size, lines = 0, 0
+        result.append({
+            'name':     fname,
+            'path':     fpath,
+            'size':     size,
+            'lines':    lines,
+            'type':     'custom',
+            'builtin':  False,
+        })
+
+    # 2. rockyou.txt
+    if os.path.isfile(ROCKYOU):
+        try:
+            size = os.path.getsize(ROCKYOU)
+        except Exception:
+            size = 0
+        result.append({
+            'name':    'rockyou.txt',
+            'path':    ROCKYOU,
+            'size':    size,
+            'lines':   14344391,   # well-known line count
+            'type':    'builtin',
+            'builtin': True,
+        })
+
+    # 3. john's password.lst
+    if os.path.isfile(FALLBACK_WL):
+        try:
+            size  = os.path.getsize(FALLBACK_WL)
+            lines = sum(1 for _ in open(FALLBACK_WL, 'rb'))
+        except Exception:
+            size, lines = 0, 0
+        result.append({
+            'name':    'password.lst',
+            'path':    FALLBACK_WL,
+            'size':    size,
+            'lines':   lines,
+            'type':    'builtin',
+            'builtin': True,
+        })
+
+    return result
 
 
 def _cleanup_session(session: str) -> None:
@@ -597,12 +673,18 @@ def api_info():
         wl_info = (f"rockyou.txt ({ROCKYOU})"
                    if os.path.isfile(ROCKYOU)
                    else f"password.lst ({FALLBACK_WL})")
+        custom_count = len([
+            f for f in os.listdir(WORDLISTS_DIR)
+            if f.endswith(('.txt', '.lst', '.dic', '.wordlist'))
+        ]) if os.path.isdir(WORDLISTS_DIR) else 0
         return jsonify({
             'status':   'success',
             'version':  ver,
             'executable': JOHN_EXECUTABLE,
             'john_home':  JOHN_HOME,
             'wordlist':   wl_info,
+            'wordlists_dir': WORDLISTS_DIR,
+            'custom_wordlists': custom_count,
             'formats_available': True,
         })
     except Exception as exc:
@@ -795,6 +877,113 @@ def api_telegram_test():
                     'message': 'Failed – check your configuration'}), 400
 
 
+# ── Wordlist management ──────────────────────────────────────────────────────
+@app.route('/api/wordlists', methods=['GET'])
+def api_wordlists_list():
+    """List all available wordlists (custom + built-in)."""
+    try:
+        return jsonify({'status': 'success', 'wordlists': _list_wordlists()})
+    except Exception as exc:
+        return jsonify({'status': 'error', 'message': str(exc)}), 500
+
+
+@app.route('/api/wordlists/upload', methods=['POST'])
+def api_wordlists_upload():
+    """Upload a new custom wordlist (.txt / .lst / .dic)."""
+    if 'file' not in request.files:
+        return jsonify({'status': 'error', 'message': 'No file provided'}), 400
+    f = request.files['file']
+    if not f.filename:
+        return jsonify({'status': 'error', 'message': 'No filename'}), 400
+    allowed = {'.txt', '.lst', '.dic', '.wordlist'}
+    ext = os.path.splitext(f.filename)[1].lower()
+    if ext not in allowed:
+        return jsonify({'status': 'error',
+                        'message': f'Allowed extensions: {", ".join(sorted(allowed))}'}), 400
+    os.makedirs(WORDLISTS_DIR, exist_ok=True)
+    name     = secure_filename(f.filename)
+    filepath = os.path.join(WORDLISTS_DIR, name)
+    f.save(filepath)
+    try:
+        lines = sum(1 for _ in open(filepath, 'rb'))
+    except Exception:
+        lines = 0
+    return jsonify({
+        'status':   'success',
+        'message':  f'Wordlist "{name}" uploaded ({lines:,} lines)',
+        'filename': name,
+        'filepath': filepath,
+        'lines':    lines,
+    })
+
+
+@app.route('/api/wordlists/add-entry', methods=['POST'])
+def api_wordlists_add_entry():
+    """Append one or more passwords to a custom wordlist (or create it)."""
+    data     = request.get_json(silent=True) or {}
+    filename = data.get('filename', 'custom.txt').strip()
+    entries  = data.get('entries', [])
+    if isinstance(entries, str):
+        entries = [e.strip() for e in entries.splitlines() if e.strip()]
+    if not entries:
+        return jsonify({'status': 'error', 'message': 'No entries provided'}), 400
+    # Safety: only allow simple filenames, no path traversal
+    filename = os.path.basename(secure_filename(filename))
+    if not filename.endswith(('.txt', '.lst', '.dic', '.wordlist')):
+        filename += '.txt'
+    os.makedirs(WORDLISTS_DIR, exist_ok=True)
+    filepath = os.path.join(WORDLISTS_DIR, filename)
+    with open(filepath, 'a', encoding='utf-8') as fh:
+        for e in entries:
+            fh.write(e + '\n')
+    try:
+        total = sum(1 for _ in open(filepath, 'rb'))
+    except Exception:
+        total = len(entries)
+    return jsonify({
+        'status':  'success',
+        'message': f'Added {len(entries)} entr(ies) to "{filename}" (total: {total:,} lines)',
+        'filename': filename,
+        'filepath': filepath,
+        'added':    len(entries),
+        'total':    total,
+    })
+
+
+@app.route('/api/wordlists/delete/<filename>', methods=['DELETE'])
+def api_wordlists_delete(filename):
+    """Delete a custom wordlist by filename."""
+    filename = os.path.basename(secure_filename(filename))
+    filepath = os.path.join(WORDLISTS_DIR, filename)
+    if not os.path.isfile(filepath):
+        return jsonify({'status': 'error', 'message': 'File not found'}), 404
+    try:
+        os.remove(filepath)
+        return jsonify({'status': 'success', 'message': f'"{filename}" deleted'})
+    except Exception as exc:
+        return jsonify({'status': 'error', 'message': str(exc)}), 500
+
+
+@app.route('/api/wordlists/preview/<filename>')
+def api_wordlists_preview(filename):
+    """Return first 50 lines of a custom wordlist for preview."""
+    filename = os.path.basename(secure_filename(filename))
+    filepath = os.path.join(WORDLISTS_DIR, filename)
+    if not os.path.isfile(filepath):
+        return jsonify({'status': 'error', 'message': 'File not found'}), 404
+    try:
+        lines = []
+        with open(filepath, 'r', errors='replace') as fh:
+            for i, ln in enumerate(fh):
+                if i >= 50:
+                    break
+                lines.append(ln.rstrip('\n'))
+        total = sum(1 for _ in open(filepath, 'rb'))
+        return jsonify({'status': 'success', 'lines': lines, 'total': total, 'filename': filename})
+    except Exception as exc:
+        return jsonify({'status': 'error', 'message': str(exc)}), 500
+
+
 # ── Favicon ──────────────────────────────────────────────────────────────────
 @app.route('/favicon.ico')
 def favicon():
@@ -837,6 +1026,7 @@ def api_version():
 # ═════════════════════════════════════════════════════════════════════════════
 if __name__ == '__main__':
     os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+    os.makedirs(WORDLISTS_DIR, exist_ok=True)
     print("=" * 60)
     print("  John the Ripper Web UI  –  jumbo edition")
     print("=" * 60)

@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════════
-   John the Ripper Web UI – style.css  v6.0
+   John the Ripper Web UI – style.css  v7.0
    ═══════════════════════════════════════════════════════════════ */
 
 /* ── Reset ─────────────────────────────────────────────────────── */
@@ -1216,6 +1216,87 @@ input[type="file"] {
     justify-content: center;
     font-size: 1rem;
     padding: .85rem;
+}
+
+/* ── Wordlist Manager ──────────────────────────────────────────── */
+.wl-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 1rem;
+}
+
+.wl-card {
+    background: var(--bg-color);
+    border-radius: 10px;
+    border: 1px solid var(--border-color);
+    padding: 1rem 1.1rem;
+    display: flex;
+    flex-direction: column;
+    gap: .6rem;
+    transition: border-color .2s, box-shadow .2s;
+}
+
+.wl-card:hover {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 2px rgba(37,99,235,.12);
+}
+
+.wl-card-custom { border-left: 3px solid var(--success-color); }
+.wl-card-builtin { border-left: 3px solid var(--primary-color); }
+
+.wl-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .5rem;
+    flex-wrap: wrap;
+}
+
+.wl-card-name {
+    font-weight: 600;
+    font-size: .9rem;
+    color: var(--text-primary);
+    word-break: break-all;
+}
+
+.wl-card-meta {
+    display: flex;
+    gap: 1rem;
+    font-size: .78rem;
+    color: var(--text-secondary);
+}
+
+.wl-card-meta i { color: var(--primary-color); margin-right: .2rem; }
+
+.wl-card-actions {
+    display: flex;
+    gap: .4rem;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+/* Wordlist badges (used in card + selector) */
+.wl-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: .18rem .55rem;
+    border-radius: 20px;
+    font-size: .7rem;
+    font-weight: 700;
+    letter-spacing: .3px;
+}
+
+.wl-badge-custom  { background: rgba(16,185,129,.15); color: var(--success-color); }
+.wl-badge-builtin { background: rgba(37,99,235,.12);  color: var(--primary-color); }
+
+/* Wordlist count badge in card-header */
+#wl-total-badge {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    color: var(--text-secondary);
+    padding: .2rem .65rem;
+    border-radius: 20px;
+    font-size: .75rem;
 }
 
 /* ── Footer ────────────────────────────────────────────────────── */

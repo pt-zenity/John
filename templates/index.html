@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>John the Ripper Web UI - Professional Password Cracking Interface</title>
     <link rel="icon" href="/favicon.ico" type="image/svg+xml">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=6.0">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=7.0">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 <body>
@@ -18,6 +18,9 @@
                     <h1>John the Ripper Web UI</h1>
                 </div>
                 <div class="header-info">
+                    <button class="btn btn-small btn-secondary" onclick="openWordlistManager()">
+                        <i class="fas fa-list-ul"></i> Wordlists
+                    </button>
                     <button class="btn btn-small btn-secondary" onclick="openTelegramSettings()">
                         <i class="fab fa-telegram"></i> Telegram
                     </button>
@@ -142,20 +145,30 @@ user:5f4dcc3b5aa765d61d8327deb882cf99  (MD5)"></textarea>
                                     <i class="fas fa-cogs"></i> Cracking Mode
                                 </label>
                                 <select id="crack-mode" required>
-                                    <option value="wordlist">Wordlist + Rules (rockyou.txt + best64) ⭐</option>
+                                    <option value="wordlist" selected>Wordlist + Rules ⭐ (Recommended)</option>
                                     <option value="default">Default (Single → Wordlist otomatis)</option>
                                     <option value="single">Single Crack Mode (username-based)</option>
                                     <option value="incremental">Incremental (brute-force semua kombinasi)</option>
                                 </select>
                             </div>
 
-                            <div class="form-group" id="wordlist-group" style="display:none">
-                                <label for="wordlist-path">
-                                    <i class="fas fa-list"></i> Custom Wordlist Path (optional)
+                            <!-- Wordlist Selector — shown for wordlist/default mode -->
+                            <div class="form-group" id="wordlist-group" style="display:block">
+                                <label for="wordlist-select" style="display:flex;align-items:center;justify-content:space-between">
+                                    <span><i class="fas fa-list"></i> Wordlist</span>
+                                    <button type="button" class="btn btn-small btn-secondary"
+                                        style="padding:.2rem .5rem;font-size:.7rem"
+                                        onclick="openAddEntriesModal()" title="Add passwords to wordlist">
+                                        <i class="fas fa-plus"></i> Add Passwords
+                                    </button>
                                 </label>
+                                <select id="wordlist-select">
+                                    <option value="">— Auto (rockyou.txt) —</option>
+                                </select>
+                                <small style="color:var(--text-secondary)">Or enter absolute path below:</small>
                                 <input type="text" id="wordlist-path"
-                                       placeholder="/usr/share/wordlists/rockyou.txt">
-                                <small>Leave blank to use rockyou.txt automatically</small>
+                                       placeholder="/path/to/custom/wordlist.txt"
+                                       style="margin-top:.4rem">
                             </div>
                         </div>
 
@@ -180,6 +193,37 @@ user:5f4dcc3b5aa765d61d8327deb882cf99  (MD5)"></textarea>
                             </button>
                         </div>
                     </form>
+                </div>
+            </div>
+
+            <!-- ══════════════════════════════════════════════════════════ -->
+            <!--  Wordlist Manager Card                                     -->
+            <!-- ══════════════════════════════════════════════════════════ -->
+            <div class="card" id="wordlist-manager-card">
+                <div class="card-header">
+                    <h2><i class="fas fa-list-ul"></i> Wordlist Manager</h2>
+                    <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center">
+                        <span id="wl-total-badge" class="wl-badge">0 wordlists</span>
+                        <button class="btn btn-small btn-secondary" onclick="loadWordlists()">
+                            <i class="fas fa-sync-alt"></i> Refresh
+                        </button>
+                        <button class="btn btn-small btn-primary" onclick="openAddEntriesModal()">
+                            <i class="fas fa-plus"></i> Add Passwords
+                        </button>
+                        <label class="btn btn-small btn-success" style="cursor:pointer;margin:0">
+                            <i class="fas fa-upload"></i> Upload .txt
+                            <input type="file" id="wl-upload-input" accept=".txt,.lst,.dic,.wordlist"
+                                   style="display:none" onchange="uploadWordlistFile(this)">
+                        </label>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div id="wordlists-container">
+                        <div class="empty-state">
+                            <i class="fas fa-spinner fa-spin"></i>
+                            <p>Loading wordlists…</p>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -302,6 +346,32 @@ user:5f4dcc3b5aa765d61d8327deb882cf99  (MD5)"></textarea>
         </div>
     </div>
 
+    <!-- Wordlist Modal (Add Entries / Preview) -->
+    <div id="wordlist-modal" class="modal">
+        <div class="modal-content" style="max-width:660px">
+            <div class="modal-header">
+                <h2 id="wl-modal-title"><i class="fas fa-list-ul"></i> Wordlist</h2>
+                <button class="close-btn" onclick="closeModal('wordlist-modal')">&times;</button>
+            </div>
+            <div class="modal-body" id="wl-modal-body">
+                <!-- Populated dynamically by JS -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Wordlist Preview Modal -->
+    <div id="wordlist-preview-modal" class="modal">
+        <div class="modal-content" style="max-width:600px">
+            <div class="modal-header">
+                <h2 id="wordlist-preview-title"><i class="fas fa-eye"></i> Preview</h2>
+                <button class="close-btn" onclick="closeModal('wordlist-preview-modal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="modal-output" id="wordlist-preview-body" style="max-height:55vh"></div>
+            </div>
+        </div>
+    </div>
+
     <!-- Toast Notification -->
     <div id="toast" class="toast"></div>
 
@@ -324,6 +394,6 @@ user:5f4dcc3b5aa765d61d8327deb882cf99  (MD5)"></textarea>
         </div>
     </div>
 
-    <script src="{{ url_for('static', filename='js/app.js') }}?v=6.0"></script>
+    <script src="{{ url_for('static', filename='js/app.js') }}?v=7.0"></script>
 </body>
 </html>
