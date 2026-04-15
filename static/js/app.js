@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-//  John the Ripper Web UI  –  app.js  v7.0
+//  John the Ripper Web UI  –  app.js  v7.1
 // ─────────────────────────────────────────────────────────────────────────────
 'use strict';
 
@@ -219,7 +219,8 @@ async function startCrackingJob() {
 
     const mode = modeEl.value;
     // Wordlist priority: dropdown selection → manual path input → auto
-    const wlPath = (wlSelEl && wlSelEl.value)
+    // When '__custom__' is selected, fall back to the manual text input
+    const wlPath = (wlSelEl && wlSelEl.value && wlSelEl.value !== '__custom__')
         ? wlSelEl.value
         : (wlPathEl ? wlPathEl.value.trim() : '');
     const notify = tgNotify ? tgNotify.checked : false;
@@ -924,11 +925,12 @@ function formatDate(isoStr) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Wordlist Manager
+//  Wordlist Manager  (v7.0)
+//  Cards, selector, upload, add-entries modal, preview, delete
 // ─────────────────────────────────────────────────────────────────────────────
 let _wordlistCache = [];   // last fetched list
 
-/** Load wordlists from API and populate selector + manager table. */
+/** Load wordlists from API → populate selector + manager card. */
 async function loadWordlists() {
     try {
         const res  = await fetch(`${API_BASE}/wordlists`);
@@ -936,89 +938,106 @@ async function loadWordlists() {
         if (data.status !== 'success') return;
         _wordlistCache = data.wordlists || [];
         _renderWordlistSelector(_wordlistCache);
-        _renderWordlistTable(_wordlistCache);
+        _renderWordlistCards(_wordlistCache);
+        const badge = document.getElementById('wl-total-badge');
+        if (badge) badge.textContent = `${_wordlistCache.length} wordlist${_wordlistCache.length !== 1 ? 's' : ''}`;
     } catch (e) {
         console.error('loadWordlists:', e);
     }
 }
 
-/** Populate the <select id="wordlist-select"> in the crack form. */
+/** Populate <select id="wordlist-select"> in crack form. */
 function _renderWordlistSelector(wls) {
     const sel = document.getElementById('wordlist-select');
     if (!sel) return;
     const prev = sel.value;
     sel.innerHTML = '';
 
-    // Default option (manual path)
+    // Auto / default option
     const defOpt = document.createElement('option');
     defOpt.value = '';
     defOpt.textContent = '— Auto (rockyou.txt) —';
     sel.appendChild(defOpt);
 
     wls.forEach(wl => {
-        const opt = document.createElement('option');
-        opt.value = wl.path;
-        const badge = wl.builtin ? '📦' : '✏️';
-        const lines = wl.lines > 999 ? `${(wl.lines/1000).toFixed(0)}K` : String(wl.lines);
-        opt.textContent = `${badge} ${wl.name} (${lines} lines)`;
+        const opt   = document.createElement('option');
+        opt.value   = wl.path;
+        const icon  = wl.builtin ? '📦' : '✏️';
+        const lines = wl.lines > 999999
+            ? `${(wl.lines/1000000).toFixed(1)}M`
+            : wl.lines > 999 ? `${(wl.lines/1000).toFixed(0)}K` : String(wl.lines);
+        opt.textContent = `${icon} ${wl.name}  (${lines} lines)`;
+        if (!wl.builtin) opt.style.color = 'var(--success-color)';
         sel.appendChild(opt);
     });
 
-    // Restore previous selection if still valid
+    // "Enter custom path" option
+    const custOpt = document.createElement('option');
+    custOpt.value = '__custom__';
+    custOpt.textContent = '📝 Enter custom path…';
+    sel.appendChild(custOpt);
+
+    // Restore previous selection
     if (prev && [...sel.options].some(o => o.value === prev)) sel.value = prev;
+    sel.dispatchEvent(new Event('change'));
 }
 
-/** Render the wordlist cards inside #wordlists-container. */
-function _renderWordlistTable(wls) {
+/** Render wordlist cards inside #wordlists-container. */
+function _renderWordlistCards(wls) {
     const container = document.getElementById('wordlists-container');
     if (!container) return;
 
-    // Update badge counter
-    const badge = document.getElementById('wl-total-badge');
-    if (badge) badge.textContent = `${wls.length} wordlist${wls.length !== 1 ? 's' : ''}`;
-
     if (!wls.length) {
-        container.innerHTML = `<div class="empty-state"><i class="fas fa-list"></i><p>No wordlists found. Add one above.</p></div>`;
+        container.innerHTML = `
+            <div class="empty-state">
+                <i class="fas fa-file-alt"></i>
+                <p>No wordlists yet. Upload a .txt file or click <strong>Add Passwords</strong>.</p>
+            </div>`;
         return;
     }
 
-    container.innerHTML = `<div class="wl-grid">${wls.map(wl => {
-        const sizeStr = wl.size > 1024*1024
-            ? `${(wl.size/1024/1024).toFixed(1)} MB`
-            : wl.size > 1024 ? `${(wl.size/1024).toFixed(1)} KB` : `${wl.size} B`;
-        const lines = Number(wl.lines).toLocaleString();
-        const typeIcon = wl.builtin ? '📦' : '✏️';
-        const typeCls  = wl.builtin ? 'wl-card-builtin' : 'wl-card-custom';
-        const badgeHtml = wl.builtin
-            ? `<span class="wl-badge wl-badge-builtin">built-in</span>`
-            : `<span class="wl-badge wl-badge-custom">custom</span>`;
-        const actionBtns = wl.builtin ? '' : `
-            <button class="btn btn-small btn-secondary" onclick="previewWordlist('${escapeAttr(wl.name)}')"
-                title="Preview"><i class="fas fa-eye"></i></button>
-            <button class="btn btn-small btn-danger"    onclick="deleteWordlist('${escapeAttr(wl.name)}')"
-                title="Delete"><i class="fas fa-trash"></i></button>`;
-        return `
-        <div class="wl-card ${typeCls}">
-            <div class="wl-card-header">
-                <span class="wl-card-name">${typeIcon} ${escapeHtml(wl.name)}</span>
-                ${badgeHtml}
-            </div>
-            <div class="wl-card-meta">
-                <span><i class="fas fa-align-justify"></i> ${lines} lines</span>
-                <span><i class="fas fa-hdd"></i> ${sizeStr}</span>
-            </div>
-            <div class="wl-card-actions">
-                ${actionBtns}
-                <button class="btn btn-small btn-primary" style="margin-left:auto"
-                    onclick="selectWordlistForCrack('${escapeAttr(wl.path)}')">
-                    <i class="fas fa-rocket"></i> Use
-                </button>
-            </div>
-        </div>`;
-    }).join('')}</div>`;
+    container.innerHTML = `<div class="wl-grid">${wls.map(wl => _buildWordlistCard(wl)).join('')}</div>`;
 }
 
-/** Select a wordlist in the crack-form dropdown. */
+function _buildWordlistCard(wl) {
+    const sizeStr = wl.size >= 1024*1024
+        ? `${(wl.size/1024/1024).toFixed(1)} MB`
+        : wl.size >= 1024 ? `${(wl.size/1024).toFixed(1)} KB` : `${wl.size} B`;
+    const lines = wl.lines.toLocaleString();
+    const typeBadge = wl.builtin
+        ? `<span class="wl-badge wl-badge-builtin"><i class="fas fa-box"></i> built-in</span>`
+        : `<span class="wl-badge wl-badge-custom"><i class="fas fa-pen"></i> custom</span>`;
+
+    const previewBtn = wl.builtin ? '' :
+        `<button class="btn btn-small btn-secondary" onclick="previewWordlist('${escapeAttr(wl.name)}')" title="Preview"><i class="fas fa-eye"></i> Preview</button>`;
+    const deleteBtn = wl.builtin ? '' :
+        `<button class="btn btn-small btn-danger" onclick="deleteWordlist('${escapeAttr(wl.name)}')" title="Delete"><i class="fas fa-trash"></i></button>`;
+    const addBtn = wl.builtin ? '' :
+        `<button class="btn btn-small btn-success" onclick="openAddEntriesModal('${escapeAttr(wl.name)}')" title="Add passwords"><i class="fas fa-plus"></i></button>`;
+
+    return `
+        <div class="wl-card ${wl.builtin ? 'wl-card-builtin' : 'wl-card-custom'}">
+            <div class="wl-card-header">
+                <div class="wl-card-icon"><i class="fas fa-file-alt"></i></div>
+                <div class="wl-card-info">
+                    <div class="wl-card-name" title="${escapeAttr(wl.path)}">${escapeHtml(wl.name)}</div>
+                    ${typeBadge}
+                </div>
+            </div>
+            <div class="wl-card-stats">
+                <div class="wl-stat"><i class="fas fa-align-left"></i> ${lines} lines</div>
+                <div class="wl-stat"><i class="fas fa-hdd"></i> ${sizeStr}</div>
+            </div>
+            <div class="wl-card-actions">
+                ${previewBtn}
+                ${addBtn}
+                <button class="btn btn-small btn-primary" onclick="selectWordlistForCrack('${escapeAttr(wl.path)}')" title="Use this wordlist"><i class="fas fa-play"></i> Use</button>
+                ${deleteBtn}
+            </div>
+        </div>`;
+}
+
+/** Select a wordlist in the crack-form dropdown and scroll to form. */
 function selectWordlistForCrack(path) {
     const modeEl = document.getElementById('crack-mode');
     const selEl  = document.getElementById('wordlist-select');
@@ -1026,12 +1045,11 @@ function selectWordlistForCrack(path) {
         modeEl.value = 'wordlist';
         modeEl.dispatchEvent(new Event('change'));
     }
-    if (selEl) selEl.value = path;
-    // Also set manual path input as fallback
-    const pathEl = document.getElementById('wordlist-path');
-    if (pathEl) pathEl.value = path;
-    showToast(`Wordlist "${path.split('/').pop()}" selected ✅`, 'success');
-    // Scroll to form
+    if (selEl) {
+        selEl.value = path;
+        selEl.dispatchEvent(new Event('change'));
+    }
+    showToast(`✅ Wordlist "${path.split('/').pop()}" selected`, 'success');
     document.getElementById('crack-form')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
@@ -1040,18 +1058,38 @@ async function previewWordlist(filename) {
     try {
         const res  = await fetch(`${API_BASE}/wordlists/preview/${encodeURIComponent(filename)}`);
         const data = await res.json();
-        if (data.status !== 'success') { showToast(data.message, 'error'); return; }
-        const modal = document.getElementById('wordlist-preview-modal');
-        const body  = document.getElementById('wordlist-preview-body');
+        if (data.status !== 'success') { showToast(data.message || 'Preview failed', 'error'); return; }
+
+        const title = document.getElementById('wl-modal-title');
+        const body  = document.getElementById('wl-modal-body');
+        const modal = document.getElementById('wordlist-modal');
         if (!modal || !body) return;
-        document.getElementById('wordlist-preview-title').textContent =
-            `${filename}  (${data.total.toLocaleString()} lines total)`;
-        body.innerHTML = data.lines.map((ln, i) =>
-            `<div class="output-line"><span style="color:var(--text-secondary);margin-right:.75rem">${i+1}</span>${escapeHtml(ln)}</div>`
-        ).join('');
-        if (data.total > 50) {
-            body.innerHTML += `<div class="output-line" style="color:var(--text-secondary);font-style:italic">… and ${(data.total-50).toLocaleString()} more lines</div>`;
-        }
+
+        if (title) title.innerHTML =
+            `<i class="fas fa-eye"></i> ${escapeHtml(filename)}
+             <small style="color:var(--text-secondary);font-size:.75rem;margin-left:.5rem">${data.total.toLocaleString()} lines</small>`;
+
+        const wlObj   = _wordlistCache.find(w => w.name === filename);
+        const usePath = wlObj ? wlObj.path : filename;
+
+        body.innerHTML = `
+            <div class="modal-output" style="max-height:380px">
+                ${data.lines.map((ln, i) =>
+                    `<div class="output-line"><span style="color:var(--text-secondary);margin-right:.75rem;min-width:2rem;display:inline-block">${i+1}</span>${escapeHtml(ln)}</div>`
+                ).join('')}
+                ${data.total > 50
+                    ? `<div class="output-line" style="color:var(--text-secondary);font-style:italic">… and ${(data.total-50).toLocaleString()} more lines</div>`
+                    : ''}
+            </div>
+            <div style="margin-top:1rem;display:flex;gap:.5rem;justify-content:flex-end;flex-wrap:wrap">
+                <button class="btn btn-success" onclick="openAddEntriesModal('${escapeAttr(filename)}')">
+                    <i class="fas fa-plus"></i> Add Passwords
+                </button>
+                <button class="btn btn-primary" onclick="selectWordlistForCrack('${escapeAttr(usePath)}');closeModal('wordlist-modal')">
+                    <i class="fas fa-play"></i> Use this wordlist
+                </button>
+                <button class="btn btn-secondary" onclick="closeModal('wordlist-modal')">Close</button>
+            </div>`;
         modal.classList.add('active');
     } catch (e) {
         showToast('Preview failed: ' + e.message, 'error');
@@ -1060,7 +1098,7 @@ async function previewWordlist(filename) {
 
 /** Delete a custom wordlist. */
 async function deleteWordlist(filename) {
-    if (!confirm(`Delete wordlist "${filename}"? This cannot be undone.`)) return;
+    if (!confirm(`Delete wordlist "${filename}"?\nThis cannot be undone.`)) return;
     try {
         const res  = await fetch(`${API_BASE}/wordlists/delete/${encodeURIComponent(filename)}`, { method: 'DELETE' });
         const data = await res.json();
@@ -1075,38 +1113,101 @@ async function deleteWordlist(filename) {
     }
 }
 
-/** Upload a new wordlist file. */
-async function uploadWordlist() {
-    const fi = document.getElementById('wordlist-upload-file');
-    if (!fi || !fi.files.length) { showToast('Select a wordlist file first', 'error'); return; }
+/** Upload wordlist via the inline file input in the manager card header. */
+async function uploadWordlistFile(inputEl) {
+    if (!inputEl || !inputEl.files.length) return;
     const fd = new FormData();
-    fd.append('file', fi.files[0]);
+    fd.append('file', inputEl.files[0]);
+    const label = inputEl.closest('label');
+    if (label) { label.style.opacity = '.6'; label.style.pointerEvents = 'none'; }
     try {
-        const btn = document.getElementById('wl-upload-btn');
-        if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Uploading…'; }
         const res  = await fetch(`${API_BASE}/wordlists/upload`, { method: 'POST', body: fd });
         const data = await res.json();
-        if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-upload"></i> Upload'; }
         if (data.status === 'success') {
             showToast(`✅ ${data.message}`, 'success');
-            fi.value = '';
-            const span = document.getElementById('wl-upload-name');
-            if (span) span.textContent = 'Choose file…';
             loadWordlists();
         } else {
             showToast(data.message || 'Upload failed', 'error');
         }
     } catch (e) {
-        showToast('Error: ' + e.message, 'error');
+        showToast('Upload error: ' + e.message, 'error');
+    } finally {
+        inputEl.value = '';
+        if (label) { label.style.opacity = ''; label.style.pointerEvents = ''; }
     }
 }
 
-/** Add passwords typed/pasted in the textarea to a custom wordlist. */
+/** Open Add Passwords modal (appends to specified custom wordlist). */
+function openAddEntriesModal(targetFile) {
+    const title = document.getElementById('wl-modal-title');
+    const body  = document.getElementById('wl-modal-body');
+    const modal = document.getElementById('wordlist-modal');
+    if (!modal || !body) return;
+
+    const defaultFile  = targetFile || 'custom.txt';
+    const customWls    = _wordlistCache.filter(w => !w.builtin);
+    const hasDefault   = customWls.some(w => w.name === defaultFile);
+    const options      = customWls.map(w =>
+        `<option value="${escapeAttr(w.name)}" ${w.name === defaultFile ? 'selected' : ''}>${escapeHtml(w.name)} (${w.lines.toLocaleString()} lines)</option>`
+    ).join('');
+    const newOpt       = `<option value="custom.txt" ${!hasDefault && defaultFile==='custom.txt' ? 'selected' : ''}>+ custom.txt (create new)</option>`;
+
+    if (title) title.innerHTML = '<i class="fas fa-plus"></i> Add Passwords to Wordlist';
+    body.innerHTML = `
+        <div class="form-group" style="margin-bottom:1rem">
+            <label for="wl-target-name"><i class="fas fa-file-alt"></i> Target wordlist</label>
+            <select id="wl-target-name" style="width:100%">
+                ${options}
+                ${newOpt}
+            </select>
+            <small>Passwords will be appended to this file</small>
+        </div>
+        <div class="form-group" style="margin-bottom:1rem">
+            <label for="wl-add-entries"><i class="fas fa-key"></i> Passwords (one per line)</label>
+            <textarea id="wl-add-entries" rows="12"
+                style="width:100%;font-family:monospace;font-size:.875rem"
+                placeholder="Paste or type passwords here, one per line:
+p95955151
+M@rs**70
+m@rs27272727
+27272727
+mars95955151
+Mars@95955151
+m4rs95955151
+.M@rsDB##
+mars27272727
+M@rs27272727
+!Mars27272727
+m@rsroya1!
+89899898"></textarea>
+            <small id="wl-entry-count" style="color:var(--text-secondary)"></small>
+        </div>
+        <div style="display:flex;gap:.5rem;justify-content:flex-end;flex-wrap:wrap">
+            <button class="btn btn-primary" onclick="addEntriesToWordlist()">
+                <i class="fas fa-plus"></i> Add to Wordlist
+            </button>
+            <button class="btn btn-secondary" onclick="closeModal('wordlist-modal')">Cancel</button>
+        </div>`;
+
+    // Live entry count
+    const ta    = body.querySelector('#wl-add-entries');
+    const cntEl = body.querySelector('#wl-entry-count');
+    if (ta && cntEl) {
+        const updateCount = () => {
+            const n = ta.value.split('\n').map(l=>l.trim()).filter(Boolean).length;
+            cntEl.textContent = n ? `${n} password${n!==1?'s':''} to add` : '';
+        };
+        ta.addEventListener('input', updateCount);
+    }
+    modal.classList.add('active');
+}
+
+/** Save textarea entries to a wordlist file. */
 async function addEntriesToWordlist() {
     const ta   = document.getElementById('wl-add-entries');
     const fn   = document.getElementById('wl-target-name');
-    if (!ta)  return;
-    const text = ta.value.trim();
+    if (!ta) return;
+    const text     = ta.value.trim();
     if (!text) { showToast('Type or paste passwords first', 'error'); return; }
     const filename = fn ? (fn.value.trim() || 'custom.txt') : 'custom.txt';
     const entries  = text.split('\n').map(l => l.trim()).filter(Boolean);
@@ -1119,7 +1220,7 @@ async function addEntriesToWordlist() {
         const data = await res.json();
         if (data.status === 'success') {
             showToast(`✅ ${data.message}`, 'success');
-            ta.value = '';
+            closeModal('wordlist-modal');
             loadWordlists();
         } else {
             showToast(data.message || 'Failed', 'error');
@@ -1129,81 +1230,9 @@ async function addEntriesToWordlist() {
     }
 }
 
-/** Upload a wordlist file directly from inline file-input. */
-async function uploadWordlistFile(input) {
-    if (!input || !input.files.length) return;
-    const file = input.files[0];
-    const fd = new FormData();
-    fd.append('file', file);
-    try {
-        const res  = await fetch(`${API_BASE}/wordlists/upload`, { method: 'POST', body: fd });
-        const data = await res.json();
-        input.value = ''; // reset
-        if (data.status === 'success') {
-            showToast(`✅ ${data.message}`, 'success');
-            loadWordlists();
-        } else {
-            showToast(data.message || 'Upload failed', 'error');
-        }
-    } catch (e) {
-        showToast('Error: ' + e.message, 'error');
-    }
-}
-
-/** Open Add Entries modal (inline in wordlist-modal). */
-function openAddEntriesModal() {
-    const modal     = document.getElementById('wordlist-modal');
-    const title     = document.getElementById('wl-modal-title');
-    const body      = document.getElementById('wl-modal-body');
-    if (!modal || !body) return;
-
-    // Build list of existing custom wordlists for the target dropdown
-    const customWls = _wordlistCache.filter(w => !w.builtin);
-    const optionsHtml = customWls.length
-        ? customWls.map(w => `<option value="${escapeAttr(w.name)}">${escapeHtml(w.name)}</option>`).join('')
-        : '<option value="custom.txt">custom.txt (will be created)</option>';
-
-    if (title) title.innerHTML = '<i class="fas fa-plus"></i> Add Passwords to Wordlist';
-    body.innerHTML = `
-        <div class="form-group" style="margin-bottom:1rem">
-            <label for="wl-target-name"><i class="fas fa-file-alt"></i> Target Wordlist</label>
-            <select id="wl-target-name">
-                <option value="custom.txt">custom.txt</option>
-                ${optionsHtml}
-            </select>
-            <small>Select existing or type a new name</small>
-        </div>
-        <div class="form-group" style="margin-bottom:1rem">
-            <label for="wl-add-entries"><i class="fas fa-key"></i> Passwords (one per line)</label>
-            <textarea id="wl-add-entries" rows="10" placeholder="EnterYourPasswords\nOnePerLine\nLike this..."
-                style="font-family:monospace"></textarea>
-            <small id="wl-entry-count">0 passwords</small>
-        </div>
-        <div class="form-actions">
-            <button type="button" class="btn btn-primary" onclick="addEntriesToWordlist()">
-                <i class="fas fa-plus"></i> Add to Wordlist
-            </button>
-            <button type="button" class="btn btn-secondary" onclick="closeModal('wordlist-modal')">
-                <i class="fas fa-times"></i> Cancel
-            </button>
-        </div>`;
-
-    // Live count
-    const ta = body.querySelector('#wl-add-entries');
-    const ct = body.querySelector('#wl-entry-count');
-    if (ta && ct) {
-        ta.addEventListener('input', () => {
-            const n = ta.value.split('\n').filter(l => l.trim()).length;
-            ct.textContent = `${n} password${n !== 1 ? 's' : ''}`;
-        });
-    }
-
-    modal.classList.add('active');
-}
-
-/** Open Wordlist Manager modal. */
+/** Scroll to the Wordlist Manager card. */
 function openWordlistManager() {
+    const card = document.getElementById('wordlist-manager-card');
+    if (card) card.scrollIntoView({ behavior: 'smooth', block: 'start' });
     loadWordlists();
-    const modal = document.getElementById('wordlist-modal');
-    if (modal) modal.classList.add('active');
 }

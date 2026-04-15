@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>John the Ripper Web UI - Professional Password Cracking Interface</title>
     <link rel="icon" href="/favicon.ico" type="image/svg+xml">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=7.0">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=7.1">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 <body>
@@ -165,10 +165,10 @@ user:5f4dcc3b5aa765d61d8327deb882cf99  (MD5)"></textarea>
                                 <select id="wordlist-select">
                                     <option value="">— Auto (rockyou.txt) —</option>
                                 </select>
-                                <small style="color:var(--text-secondary)">Or enter absolute path below:</small>
+                                <small id="wordlist-select-hint" style="color:var(--text-secondary)">Will use rockyou.txt automatically</small>
                                 <input type="text" id="wordlist-path"
                                        placeholder="/path/to/custom/wordlist.txt"
-                                       style="margin-top:.4rem">
+                                       style="margin-top:.4rem;display:none">
                             </div>
                         </div>
 
@@ -394,6 +394,6 @@ user:5f4dcc3b5aa765d61d8327deb882cf99  (MD5)"></textarea>
         </div>
     </div>
 
-    <script src="{{ url_for('static', filename='js/app.js') }}?v=7.0"></script>
+    <script src="{{ url_for('static', filename='js/app.js') }}?v=7.1"></script>
 </body>
 </html>

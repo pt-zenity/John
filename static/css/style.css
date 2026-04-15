@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════════
-   John the Ripper Web UI – style.css  v7.0
+   John the Ripper Web UI – style.css  v7.1
    ═══════════════════════════════════════════════════════════════ */
 
 /* ── Reset ─────────────────────────────────────────────────────── */
@@ -1267,6 +1267,38 @@ input[type="file"] {
 }
 
 .wl-card-meta i { color: var(--primary-color); margin-right: .2rem; }
+
+/* icon + info layout inside card header */
+.wl-card-icon {
+    font-size: 1.4rem;
+    color: var(--primary-color);
+    flex-shrink: 0;
+}
+
+.wl-card-info {
+    display: flex;
+    flex-direction: column;
+    gap: .2rem;
+    flex: 1;
+    min-width: 0;
+}
+
+/* stats row (lines / size) */
+.wl-card-stats {
+    display: flex;
+    gap: .8rem;
+    font-size: .78rem;
+    color: var(--text-secondary);
+    flex-wrap: wrap;
+}
+
+.wl-stat {
+    display: inline-flex;
+    align-items: center;
+    gap: .25rem;
+}
+
+.wl-stat i { color: var(--primary-color); font-size: .75rem; }
 
 .wl-card-actions {
     display: flex;
