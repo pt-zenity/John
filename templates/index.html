@@ -4,7 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>John the Ripper Web UI - Professional Password Cracking Interface</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="icon" href="/favicon.ico" type="image/svg+xml">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=7.1">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 <body>
@@ -17,7 +18,13 @@
                     <h1>John the Ripper Web UI</h1>
                 </div>
                 <div class="header-info">
-                    <span class="version" id="version-info">Loading...</span>
+                    <button class="btn btn-small btn-secondary" onclick="openWordlistManager()">
+                        <i class="fas fa-list-ul"></i> Wordlists
+                    </button>
+                    <button class="btn btn-small btn-secondary" onclick="openTelegramSettings()">
+                        <i class="fab fa-telegram"></i> Telegram
+                    </button>
+                    <span class="version" id="version-info">Loading…</span>
                     <span class="status-indicator online">
                         <i class="fas fa-circle"></i> Online
                     </span>
@@ -29,6 +36,7 @@
     <!-- Main Content -->
     <main class="main-content">
         <div class="container">
+
             <!-- Stats Cards -->
             <div class="stats-grid">
                 <div class="stat-card">
@@ -73,25 +81,63 @@
             <div class="card">
                 <div class="card-header">
                     <h2><i class="fas fa-plus-circle"></i> New Cracking Job</h2>
+                    <div class="input-toggle">
+                        <button type="button"
+                                class="toggle-btn active"
+                                data-target="upload-section"
+                                onclick="switchInputMode('upload', this)">
+                            <i class="fas fa-upload"></i> Upload File
+                        </button>
+                        <button type="button"
+                                class="toggle-btn"
+                                data-target="paste-section"
+                                onclick="switchInputMode('paste', this)">
+                            <i class="fas fa-paste"></i> Paste Hashes
+                        </button>
+                    </div>
                 </div>
                 <div class="card-body">
-                    <form id="crack-form">
-                        <div class="form-row">
-                            <div class="form-group full-width">
-                                <label for="hash-file">
-                                    <i class="fas fa-file-upload"></i> Hash File
-                                </label>
-                                <div class="file-upload-wrapper">
-                                    <input type="file" id="hash-file" accept=".txt,.hash,.passwd,.shadow" required>
-                                    <div class="file-upload-display">
-                                        <i class="fas fa-cloud-upload-alt"></i>
-                                        <span>Click to upload or drag and drop</span>
-                                        <small>Supported: .txt, .hash, .passwd, .shadow (Max 16MB)</small>
+                    <form id="crack-form" autocomplete="off">
+
+                        <!-- Upload Section -->
+                        <div id="upload-section" class="input-section active">
+                            <div class="form-row">
+                                <div class="form-group full-width">
+                                    <label for="hash-file">
+                                        <i class="fas fa-file-upload"></i> Hash File
+                                    </label>
+                                    <div class="file-upload-wrapper">
+                                        <input type="file" id="hash-file"
+                                               accept=".txt,.hash,.passwd,.shadow">
+                                        <div class="file-upload-display">
+                                            <i class="fas fa-cloud-upload-alt"></i>
+                                            <span>Click to upload or drag and drop</span>
+                                            <small>Supported: .txt .hash .passwd .shadow (Max 16 MB)</small>
+                                        </div>
                                     </div>
                                 </div>
-                                <div id="upload-status" class="upload-status"></div>
                             </div>
                         </div>
+
+                        <!-- Paste Section -->
+                        <div id="paste-section" class="input-section">
+                            <div class="form-row">
+                                <div class="form-group full-width">
+                                    <label for="hash-paste">
+                                        <i class="fas fa-paste"></i> Paste Hashes
+                                    </label>
+                                    <textarea id="hash-paste" rows="8"
+                                              placeholder="Paste your hashes here, one per line…
+Examples:
+admin:$2y$12$...bcrypt...
+user:$6$salt$...sha512...
+user:5f4dcc3b5aa765d61d8327deb882cf99  (MD5)"></textarea>
+                                    <small>Any john-supported format: bcrypt, MD5, SHA-512, NTLM, etc.</small>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="upload-status" class="upload-status"></div>
 
                         <div class="form-row">
                             <div class="form-group">
@@ -99,18 +145,42 @@
                                     <i class="fas fa-cogs"></i> Cracking Mode
                                 </label>
                                 <select id="crack-mode" required>
-                                    <option value="default">Default (Auto)</option>
-                                    <option value="single">Single Crack Mode</option>
-                                    <option value="wordlist">Wordlist Mode</option>
-                                    <option value="incremental">Incremental Mode</option>
+                                    <option value="wordlist" selected>Wordlist + Rules ⭐ (Recommended)</option>
+                                    <option value="default">Default (Single → Wordlist otomatis)</option>
+                                    <option value="single">Single Crack Mode (username-based)</option>
+                                    <option value="incremental">Incremental (brute-force semua kombinasi)</option>
                                 </select>
                             </div>
 
-                            <div class="form-group" id="wordlist-group" style="display: none;">
-                                <label for="wordlist-path">
-                                    <i class="fas fa-list"></i> Wordlist Path (optional)
+                            <!-- Wordlist Selector — shown for wordlist/default mode -->
+                            <div class="form-group" id="wordlist-group" style="display:block">
+                                <label for="wordlist-select" style="display:flex;align-items:center;justify-content:space-between">
+                                    <span><i class="fas fa-list"></i> Wordlist</span>
+                                    <button type="button" class="btn btn-small btn-secondary"
+                                        style="padding:.2rem .5rem;font-size:.7rem"
+                                        onclick="openAddEntriesModal()" title="Add passwords to wordlist">
+                                        <i class="fas fa-plus"></i> Add Passwords
+                                    </button>
                                 </label>
-                                <input type="text" id="wordlist-path" placeholder="/usr/share/wordlists/rockyou.txt">
+                                <select id="wordlist-select">
+                                    <option value="">— Auto (rockyou.txt) —</option>
+                                </select>
+                                <small id="wordlist-select-hint" style="color:var(--text-secondary)">Will use rockyou.txt automatically</small>
+                                <input type="text" id="wordlist-path"
+                                       placeholder="/path/to/custom/wordlist.txt"
+                                       style="margin-top:.4rem;display:none">
+                            </div>
+                        </div>
+
+                        <div class="form-row">
+                            <div class="form-group full-width">
+                                <label class="checkbox-label">
+                                    <input type="checkbox" id="telegram-notify">
+                                    <span><i class="fab fa-telegram"></i> Send results to Telegram</span>
+                                </label>
+                                <small id="telegram-status" class="telegram-hint">
+                                    Configure Telegram in settings to enable notifications
+                                </small>
                             </div>
                         </div>
 
@@ -126,10 +196,41 @@
                 </div>
             </div>
 
+            <!-- ══════════════════════════════════════════════════════════ -->
+            <!--  Wordlist Manager Card                                     -->
+            <!-- ══════════════════════════════════════════════════════════ -->
+            <div class="card" id="wordlist-manager-card">
+                <div class="card-header">
+                    <h2><i class="fas fa-list-ul"></i> Wordlist Manager</h2>
+                    <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center">
+                        <span id="wl-total-badge" class="wl-badge">0 wordlists</span>
+                        <button class="btn btn-small btn-secondary" onclick="loadWordlists()">
+                            <i class="fas fa-sync-alt"></i> Refresh
+                        </button>
+                        <button class="btn btn-small btn-primary" onclick="openAddEntriesModal()">
+                            <i class="fas fa-plus"></i> Add Passwords
+                        </button>
+                        <label class="btn btn-small btn-success" style="cursor:pointer;margin:0">
+                            <i class="fas fa-upload"></i> Upload .txt
+                            <input type="file" id="wl-upload-input" accept=".txt,.lst,.dic,.wordlist"
+                                   style="display:none" onchange="uploadWordlistFile(this)">
+                        </label>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div id="wordlists-container">
+                        <div class="empty-state">
+                            <i class="fas fa-spinner fa-spin"></i>
+                            <p>Loading wordlists…</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- Active Jobs Section -->
             <div class="card">
                 <div class="card-header">
-                    <h2><i class="fas fa-spinner"></i> Active Jobs</h2>
+                    <h2><i class="fas fa-spinner fa-spin"></i> Active Jobs</h2>
                     <button class="btn btn-small btn-secondary" onclick="refreshJobs()">
                         <i class="fas fa-sync-alt"></i> Refresh
                     </button>
@@ -158,13 +259,14 @@
                     </div>
                 </div>
             </div>
+
         </div>
     </main>
 
     <!-- Footer -->
     <footer class="footer">
         <div class="container">
-            <p>&copy; 2026 John the Ripper Web UI. Professional Password Security Testing Platform.</p>
+            <p>&copy; 2026 John the Ripper Web UI &mdash; Professional Password Security Testing Platform</p>
             <p><i class="fas fa-shield-alt"></i> Use responsibly and ethically. Only test passwords you own or have permission to test.</p>
         </div>
     </footer>
@@ -174,10 +276,98 @@
         <div class="modal-content">
             <div class="modal-header">
                 <h2><i class="fas fa-info-circle"></i> Job Details</h2>
-                <button class="close-btn" onclick="closeModal()">&times;</button>
+                <button class="close-btn" onclick="closeModal('job-modal')">&times;</button>
             </div>
             <div class="modal-body" id="modal-body">
-                <!-- Job details will be inserted here -->
+                <!-- Populated by JS -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Telegram Settings Modal -->
+    <div id="telegram-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2><i class="fab fa-telegram"></i> Telegram Settings</h2>
+                <button class="close-btn" onclick="closeModal('telegram-modal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="telegram-form" autocomplete="off">
+                    <div class="form-group">
+                        <label for="bot-token">
+                            <i class="fas fa-robot"></i> Bot Token
+                        </label>
+                        <input type="text" id="bot-token"
+                               placeholder="1234567890:ABCdefGHIjklMNOpqrsTUVwxyz">
+                        <small>Get your bot token from
+                            <a href="https://t.me/BotFather" target="_blank" rel="noopener">@BotFather</a>
+                        </small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="chat-id">
+                            <i class="fas fa-comment"></i> Chat ID
+                        </label>
+                        <input type="text" id="chat-id" placeholder="-100123456789">
+                        <small>Get your chat ID from
+                            <a href="https://t.me/userinfobot" target="_blank" rel="noopener">@userinfobot</a>
+                        </small>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="telegram-enabled">
+                            <span>Enable Telegram Notifications</span>
+                        </label>
+                    </div>
+
+                    <div class="form-actions">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-save"></i> Save &amp; Test
+                        </button>
+                        <button type="button" class="btn btn-secondary" onclick="testTelegram()">
+                            <i class="fas fa-paper-plane"></i> Send Test Message
+                        </button>
+                    </div>
+                </form>
+
+                <div class="telegram-info">
+                    <h4><i class="fas fa-info-circle"></i> How to Set Up:</h4>
+                    <ol>
+                        <li>Open Telegram and search for <strong>@BotFather</strong></li>
+                        <li>Send <code>/newbot</code> and follow instructions</li>
+                        <li>Copy the <strong>Bot Token</strong> provided</li>
+                        <li>Search for <strong>@userinfobot</strong> and send any message</li>
+                        <li>Copy your <strong>Chat ID</strong> from the response</li>
+                        <li>Paste both values above and click <strong>Save &amp; Test</strong></li>
+                    </ol>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Wordlist Modal (Add Entries / Preview) -->
+    <div id="wordlist-modal" class="modal">
+        <div class="modal-content" style="max-width:660px">
+            <div class="modal-header">
+                <h2 id="wl-modal-title"><i class="fas fa-list-ul"></i> Wordlist</h2>
+                <button class="close-btn" onclick="closeModal('wordlist-modal')">&times;</button>
+            </div>
+            <div class="modal-body" id="wl-modal-body">
+                <!-- Populated dynamically by JS -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Wordlist Preview Modal -->
+    <div id="wordlist-preview-modal" class="modal">
+        <div class="modal-content" style="max-width:600px">
+            <div class="modal-header">
+                <h2 id="wordlist-preview-title"><i class="fas fa-eye"></i> Preview</h2>
+                <button class="close-btn" onclick="closeModal('wordlist-preview-modal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="modal-output" id="wordlist-preview-body" style="max-height:55vh"></div>
             </div>
         </div>
     </div>
@@ -185,6 +375,25 @@
     <!-- Toast Notification -->
     <div id="toast" class="toast"></div>
 
-    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+    <!-- Password Found Modal -->
+    <div id="password-found-modal" class="password-found-modal">
+        <div class="password-found-content">
+            <div class="success-animation">
+                <div class="success-circle">
+                    <i class="fas fa-check"></i>
+                </div>
+                <div class="confetti"></div>
+            </div>
+            <h2 class="success-title">🎉 Password Cracked!</h2>
+            <div class="cracked-password-display" id="cracked-password-display">
+                <!-- Password details inserted by JS -->
+            </div>
+            <button class="btn btn-primary" onclick="closePasswordModal()">
+                <i class="fas fa-check"></i> Got it!
+            </button>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/app.js') }}?v=7.1"></script>
 </body>
 </html>

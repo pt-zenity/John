@@ -1,0 +1,12 @@
+# Demo Hash File for Testing John the Ripper Web UI
+
+# MD5 Hashes (example passwords: password, 123456, admin)
+$1$salt$qJH7.N4xYta3aEG/dfqo/0
+$1$salt$SyVZ4zG.vOJ8tBGTIcjZk1
+
+# SHA-512 Hashes (user:password format)
+testuser:$6$rounds=5000$saltsalt$IxDD3jeSOb5eB1CX5LBsqZFVkJdido3OUILO5Ifz5iwMuTS4XMS130MTSuDDl3aCI6WouIL9AjRbLCelDCy.g0
+
+# Note: These are DEMO hashes for testing purposes only
+# They represent simple passwords like "password", "123456", "admin"
+# Use this file to test the web UI functionality
